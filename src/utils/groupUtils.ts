@@ -1,0 +1,608 @@
+import { v4 as uuidv4 } from 'uuid';
+import { db, Group } from '../db/database';
+import { computeCourseDates } from './dateUtils';
+import { formatUniqueNumber } from './uniqueNumberUtils';
+
+/**
+ * Get the active group (only one can be active at a time)
+ */
+export async function getActiveGroup(): Promise<Group | undefined> {
+  return db.groups.where('status').equals('active').first();
+}
+
+/**
+ * Generate unique numbers for all participants in a group
+ * Used when planned group becomes active
+ */
+export async function generateUniqueNumbersForGroup(groupNumber: number): Promise<void> {
+  // Get all participants in this group that need unique numbers
+  const participants = await db.participants
+    .where('groupNumber')
+    .equals(groupNumber)
+    .toArray();
+  
+  const participantsNeedingNumbers = participants.filter(p => !p.uniqueNumber);
+  if (participantsNeedingNumbers.length === 0) return;
+  
+  // Get all existing unique numbers from ALL participants
+  const allParticipants = await db.participants.toArray();
+  const existingNumbersSet = new Set(
+    allParticipants
+      .map(p => p.uniqueNumber)
+      .filter(n => n)
+  );
+  
+  // Generate sequential unique numbers for all participants in batch
+  let prefix = 3531;
+  let seq = 1;
+  const assignedNumbers: { participantId: string; uniqueNumber: string }[] = [];
+  
+  for (const participant of participantsNeedingNumbers) {
+    // Find next available number
+    while (true) {
+      const candidateNumber = formatUniqueNumber(prefix, seq);
+      
+      // Check if not in existing set AND not already assigned in this batch
+      if (!existingNumbersSet.has(candidateNumber) && 
+          !assignedNumbers.some(a => a.uniqueNumber === candidateNumber)) {
+        assignedNumbers.push({
+          participantId: participant.id!,
+          uniqueNumber: candidateNumber
+        });
+        break;
+      }
+      
+      prefix++;
+      seq++;
+      
+      if (prefix > 9999) {
+        throw new Error('Could not generate unique numbers - sequence exhausted');
+      }
+    }
+    
+    prefix++;
+    seq++;
+  }
+  
+  // Update all participants with their new unique numbers
+  for (const assignment of assignedNumbers) {
+    await db.participants.update(assignment.participantId, {
+      uniqueNumber: assignment.uniqueNumber
+    });
+  }
+  
+  // Update settings with the last used prefix/seq
+  if (assignedNumbers.length > 0) {
+    await db.settings.update(1, {
+      lastUniquePrefix: prefix - 1,
+      lastUniqueSeq: seq - 1
+    });
+  }
+}
+
+/**
+ * Sync group dates with its participants' earliest medical date
+ */
+export async function syncGroupDates(groupNumber: number): Promise<void> {
+  const group = await db.groups.where('groupNumber').equals(groupNumber).first();
+  if (!group) return;
+  
+  // Get all participants in this group
+  const participants = await db.participants.where('groupNumber').equals(groupNumber).toArray();
+  if (participants.length === 0) return;
+  
+  // Find earliest medical date
+  const medicalDates = participants.map(p => p.medicalDate).sort();
+  const earliestMedical = medicalDates[0];
+  
+  // Compute correct course dates
+  const { courseStartDate, courseEndDate } = computeCourseDates(earliestMedical);
+  
+  // Update group if dates differ
+  if (group.courseStartDate !== courseStartDate || group.courseEndDate !== courseEndDate) {
+    await db.groups.update(group.id!, {
+      courseStartDate,
+      courseEndDate,
+      updatedAt: new Date().toISOString()
+    });
+    
+    // Also update all participants in this group
+    for (const p of participants) {
+      await db.participants.update(p.id!, {
+        courseStartDate,
+        courseEndDate
+      });
+    }
+  }
+}
+
+/**
+ * Get all planned groups sorted by courseStartDate
+ */
+export async function getPlannedGroups(): Promise<Group[]> {
+  return db.groups.where('status').equals('planned').sortBy('courseStartDate');
+}
+
+/**
+ * Get suggested group for a courseStartDate
+ * Returns active group if it matches, or finds/creates planned group
+ */
+export async function getSuggestedGroup(courseStartDate: string): Promise<{ group: Group | null; shouldCreate: boolean }> {
+  // Check if active group matches
+  const activeGroup = await getActiveGroup();
+  if (activeGroup && activeGroup.courseStartDate === courseStartDate) {
+    return { group: activeGroup, shouldCreate: false };
+  }
+  
+  // Check if planned group exists for this date
+  const plannedGroup = await db.groups
+    .where('courseStartDate')
+    .equals(courseStartDate)
+    .and(g => g.status === 'planned')
+    .first();
+    
+  if (plannedGroup) {
+    return { group: plannedGroup, shouldCreate: false };
+  }
+  
+  // No group exists - should create planned group
+  return { group: null, shouldCreate: true };
+}
+
+/**
+ * Create a new group (planned by default)
+ */
+export async function createGroup(courseStartDate: string, status: 'active' | 'planned' = 'planned'): Promise<Group> {
+  // Get max group number
+  const allGroups = await db.groups.toArray();
+  const maxGroupNumber = allGroups.length > 0 ? Math.max(...allGroups.map(g => g.groupNumber)) : 0;
+  const newGroupNumber = maxGroupNumber + 1;
+  
+  const courseEndDate = new Date(courseStartDate);
+  courseEndDate.setDate(courseEndDate.getDate() + 7);
+  
+  const now = new Date().toISOString();
+  
+  const newGroup: Group = {
+    id: uuidv4(),
+    groupNumber: newGroupNumber,
+    courseStartDate,
+    courseEndDate: courseEndDate.toISOString().split('T')[0],
+    status,
+    createdAt: now,
+    updatedAt: now,
+    isLocked: false
+  };
+  
+  await db.groups.add(newGroup);
+  return newGroup;
+}
+
+/**
+ * Close/Archive the active group
+ * Does NOT auto-activate next planned group
+ */
+export async function closeActiveGroup(): Promise<void> {
+  const activeGroup = await getActiveGroup();
+  if (!activeGroup) {
+    throw new Error('No active group to close');
+  }
+  
+  const now = new Date().toISOString();
+  
+  // Mark active group as completed (archived) and locked
+  await db.groups.update(activeGroup.id, {
+    status: 'completed',
+    updatedAt: now,
+    closedAt: now,
+    isLocked: true
+  });
+  
+  // NO automatic activation of next planned group
+}
+
+/**
+ * Activate a planned group (make it the active group)
+ * Closes current active group if exists
+ */
+export async function activateGroup(groupId: string): Promise<void> {
+  const group = await db.groups.get(groupId);
+  if (!group) {
+    throw new Error('Group not found');
+  }
+  
+  if (group.status !== 'planned') {
+    throw new Error('Only planned groups can be activated');
+  }
+  
+  const now = new Date().toISOString();
+  
+  // Close current active group if exists
+  const activeGroup = await getActiveGroup();
+  if (activeGroup) {
+    await db.groups.update(activeGroup.id, {
+      status: 'completed',
+      updatedAt: now
+    });
+  }
+  
+  // Activate the selected group
+  await db.groups.update(groupId, {
+    status: 'active',
+    updatedAt: now
+  });
+}
+
+/**
+ * Delete a group if it has no participants
+ */
+export async function deleteGroupIfEmpty(groupId: string): Promise<boolean> {
+  const participantCount = await db.participants
+    .where('groupNumber')
+    .equals((await db.groups.get(groupId))!.groupNumber)
+    .count();
+    
+  if (participantCount === 0) {
+    await db.groups.delete(groupId);
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Recalculate all auto groups and sync with current workflow
+ * This maintains sequential group numbers
+ */
+export async function recalculateAllAutoGroups(): Promise<number> {
+  const allParticipants = await db.participants.toArray();
+  
+  if (allParticipants.length === 0) {
+    return 0;
+  }
+  
+  // Collect unique courseStart dates from existing participants
+  const uniqueDates = new Set<string>();
+  allParticipants.forEach(p => uniqueDates.add(p.courseStartDate));
+  
+  // Sort dates ascending
+  const sortedDates = Array.from(uniqueDates).sort();
+  
+  // Create a map from courseStartDate to auto group number
+  const dateToAutoGroup = new Map<string, number>();
+  sortedDates.forEach((date, index) => {
+    dateToAutoGroup.set(date, index + 1);
+  });
+  
+  // Update all participants' autoGroup
+  let updatedCount = 0;
+  for (const participant of allParticipants) {
+    const newAutoGroup = dateToAutoGroup.get(participant.courseStartDate)!;
+    const newGroupNumber = participant.manualGroup ?? newAutoGroup;
+    
+    if (participant.autoGroup !== newAutoGroup || participant.groupNumber !== newGroupNumber) {
+      await db.participants.update(participant.id, {
+        autoGroup: newAutoGroup,
+        groupNumber: newGroupNumber
+      });
+      updatedCount++;
+    }
+  }
+  
+  return updatedCount;
+}
+
+/**
+ * Sync groups table with current participants and maintain workflow states
+ */
+export async function syncGroups(): Promise<void> {
+  const allParticipants = await db.participants.toArray();
+  const allGroups = await db.groups.toArray();
+  
+  // Collect unique courseStart dates with participant counts
+  const dateToCount = new Map<string, number>();
+  allParticipants.forEach(p => {
+    dateToCount.set(p.courseStartDate, (dateToCount.get(p.courseStartDate) || 0) + 1);
+  });
+  
+  // Delete groups with no participants (except active group)
+  for (const group of allGroups) {
+    const count = dateToCount.get(group.courseStartDate) || 0;
+    if (count === 0 && group.status !== 'active') {
+      await db.groups.delete(group.id);
+    }
+  }
+  
+  // Ensure groups exist for all participant courseStartDates
+  for (const [courseStartDate, _] of dateToCount.entries()) {
+    const existingGroup = allGroups.find(g => g.courseStartDate === courseStartDate);
+    
+    if (!existingGroup) {
+      // Create new planned group
+      await createGroup(courseStartDate, 'planned');
+    }
+  }
+}
+
+/**
+ * Get all groups ordered by group number
+ */
+export async function getAllGroups(): Promise<Group[]> {
+  return db.groups.orderBy('groupNumber').toArray();
+}
+
+/**
+ * Get a group by group number
+ */
+export async function getGroupByNumber(groupNumber: number): Promise<Group | undefined> {
+  return db.groups.where('groupNumber').equals(groupNumber).first();
+}
+
+/**
+ * Get group by courseStartDate
+ */
+export async function getGroupByCourseStart(courseStartDate: string): Promise<Group | undefined> {
+  return db.groups.where('courseStartDate').equals(courseStartDate).first();
+}
+
+/**
+ * Check if a group is read-only (completed and locked)
+ */
+export function isGroupReadOnly(group: Group | undefined): boolean {
+  return group ? group.status === 'completed' && group.isLocked : false;
+}
+
+/**
+ * Unlock a completed group to allow edits
+ */
+export async function unlockGroup(groupNumber: number): Promise<void> {
+  const group = await db.groups.where('groupNumber').equals(groupNumber).first();
+  if (!group) {
+    throw new Error('Group not found');
+  }
+  
+  if (group.status !== 'completed') {
+    throw new Error('Only completed groups can be unlocked');
+  }
+  
+  await db.groups.update(group.id, {
+    isLocked: false,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+/**
+ * Lock a completed group to prevent edits
+ */
+export async function lockGroup(groupNumber: number): Promise<void> {
+  const group = await db.groups.where('groupNumber').equals(groupNumber).first();
+  if (!group) {
+    throw new Error('Group not found');
+  }
+  
+  if (group.status !== 'completed') {
+    throw new Error('Only completed groups can be locked');
+  }
+  
+  await db.groups.update(group.id, {
+    isLocked: true,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+/**
+ * Get all completed groups sorted by group number (most recent first)
+ */
+export async function getCompletedGroups(): Promise<Group[]> {
+  return db.groups
+    .where('status')
+    .equals('completed')
+    .reverse()
+    .sortBy('groupNumber');
+}
+
+/**
+ * Legacy function - replaced by syncGroups
+ * @deprecated Use syncGroups instead
+ */
+export async function cleanupEmptyGroups(): Promise<number> {
+  await syncGroups();
+  return 0;
+}
+
+/**
+ * Fix group dates based on participants' medical dates
+ * Recalculates course start/end dates for a specific group
+ */
+export async function fixGroupDates(groupNumber: number): Promise<void> {
+  const group = await db.groups.where('groupNumber').equals(groupNumber).first();
+  if (!group) {
+    throw new Error(`Group ${groupNumber} not found`);
+  }
+
+  // Get all participants in this group
+  const participants = await db.participants
+    .where('groupNumber')
+    .equals(groupNumber)
+    .toArray();
+
+  if (participants.length === 0) {
+    console.log(`Group ${groupNumber} has no participants, skipping`);
+    return;
+  }
+
+  // Find earliest medical date to determine correct course start
+  const medicalDates = participants.map(p => new Date(p.medicalDate));
+  const earliestMedical = new Date(Math.min(...medicalDates.map(d => d.getTime())));
+
+  // Import computeCourseDates
+  const { computeCourseDates } = await import('./dateUtils');
+  const correctDates = computeCourseDates(earliestMedical.toISOString().split('T')[0]);
+
+  // Update group with correct dates
+  await db.groups.update(group.id, {
+    courseStartDate: correctDates.courseStartDate,
+    courseEndDate: correctDates.courseEndDate,
+    updatedAt: new Date().toISOString()
+  });
+
+  // Update all participants in this group
+  for (const participant of participants) {
+    await db.participants.update(participant.id, {
+      courseStartDate: correctDates.courseStartDate,
+      courseEndDate: correctDates.courseEndDate
+    });
+  }
+
+  console.log(`✅ Fixed Group ${groupNumber}: ${correctDates.courseStartDate} - ${correctDates.courseEndDate}`);
+}
+/**
+ * Make a planned group active
+ * Returns true if successful, or object with currentActive if confirmation needed
+ */
+export async function makeGroupActive(groupId: string): Promise<{ success: boolean; needsConfirm?: boolean; currentActive?: Group }> {
+  const group = await db.groups.get(groupId);
+  if (!group) {
+    throw new Error('Group not found');
+  }
+  
+  if (group.status === 'active') {
+    return { success: true }; // Already active
+  }
+  
+  // Check if there's another active group
+  const currentActive = await getActiveGroup();
+  
+  if (currentActive && currentActive.id !== groupId) {
+    // Return info for confirmation dialog
+    return {
+      success: false,
+      needsConfirm: true,
+      currentActive
+    };
+  }
+  
+  // No conflict - proceed with activation
+  return await activateGroupDirectly(groupId);
+}
+
+/**
+ * Activate group directly (after confirmation or if no conflict)
+ * If currentActiveId provided, move it to planned first
+ */
+export async function activateGroupDirectly(groupId: string, moveCurrentToPlanned: boolean = false): Promise<{ success: boolean }> {
+  const group = await db.groups.get(groupId);
+  if (!group) {
+    throw new Error('Group not found');
+  }
+  
+  const now = new Date().toISOString();
+  
+  // If requested, move current active to planned
+  if (moveCurrentToPlanned) {
+    const currentActive = await getActiveGroup();
+    if (currentActive) {
+      await db.groups.update(currentActive.id, {
+        status: 'planned',
+        updatedAt: now,
+        activatedAt: undefined
+      });
+    }
+  }
+  
+  // Activate the selected group
+  await db.groups.update(groupId, {
+    status: 'active',
+    activatedAt: now,
+    updatedAt: now,
+    isLocked: false // Unlock if it was locked (for reopening archived)
+  });
+  
+  // Generate unique numbers if this group doesn't have them yet
+  await generateUniqueNumbersForGroup(group.groupNumber);
+  
+  return { success: true };
+}
+
+/**
+ * Move active group back to planned
+ */
+export async function setActiveToPlanned(): Promise<void> {
+  const activeGroup = await getActiveGroup();
+  if (!activeGroup) {
+    throw new Error('No active group to set as planned');
+  }
+  
+  const now = new Date().toISOString();
+  
+  await db.groups.update(activeGroup.id, {
+    status: 'planned',
+    updatedAt: now,
+    activatedAt: undefined
+  });
+}
+
+/**
+ * Reopen an archived (completed) group for corrections
+ * Returns confirmation info if another group is active
+ */
+export async function reopenArchivedGroup(groupId: string): Promise<{ success: boolean; needsConfirm?: boolean; currentActive?: Group }> {
+  const group = await db.groups.get(groupId);
+  if (!group) {
+    throw new Error('Group not found');
+  }
+  
+  if (group.status !== 'completed') {
+    throw new Error('Only archived groups can be reopened');
+  }
+  
+  // Check if there's another active group
+  const currentActive = await getActiveGroup();
+  
+  if (currentActive) {
+    // Return info for confirmation dialog
+    return {
+      success: false,
+      needsConfirm: true,
+      currentActive
+    };
+  }
+  
+  // No conflict - proceed with reopen
+  return await activateGroupDirectly(groupId);
+}
+
+/**
+ * Ensure only one active group exists (data integrity check)
+ * Call on app startup
+ */
+export async function ensureSingleActiveGroup(): Promise<void> {
+  const activeGroups = await db.groups.where('status').equals('active').toArray();
+  
+  if (activeGroups.length <= 1) {
+    return; // OK
+  }
+  
+  console.warn(`⚠️ Found ${activeGroups.length} active groups! Fixing...`);
+  
+  // Keep the most recently updated as active
+  const sorted = activeGroups.sort((a, b) => 
+    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+  
+  const keepActive = sorted[0];
+  const setToPlanned = sorted.slice(1);
+  
+  const now = new Date().toISOString();
+  
+  for (const group of setToPlanned) {
+    await db.groups.update(group.id, {
+      status: 'planned',
+      updatedAt: now,
+      activatedAt: undefined
+    });
+    console.warn(`⚠️ Moved Group ${group.groupNumber} from active to planned`);
+  }
+  
+  console.log(`✅ Kept Group ${keepActive.groupNumber} as active`);
+}
