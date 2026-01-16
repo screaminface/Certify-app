@@ -32,9 +32,17 @@ function AppContent() {
   
   // Ensure data integrity on app startup
   useEffect(() => {
-    ensureSingleActiveGroup().catch(err => 
-      console.error('Failed to ensure single active group:', err)
-    );
+    const init = async () => {
+      try {
+        await ensureSingleActiveGroup();
+        // Sync groups to fix any missing numbers and ensure future periods exist
+        const { syncGroups } = await import('./utils/groupUtils');
+        await syncGroups();
+      } catch (err) {
+         console.error('Failed to initialize groups:', err);
+      }
+    };
+    init();
   }, []);
 
   // Filter states
@@ -74,9 +82,11 @@ function AppContent() {
     const currentYear = new Date().getFullYear();
 
     return participants.filter(p => {
+      // Find group for this participant
+      const groupInfo = groups?.find(g => g.courseStartDate === p.courseStartDate);
+      
       // Archive filter: only show completed participants from current year
       const completed = p.completedOverride !== null ? p.completedOverride : p.completedComputed;
-      const groupInfo = groups?.find(g => g.groupNumber === p.groupNumber);
       
       if (completed && groupInfo?.status === 'completed') {
         const courseYear = new Date(p.courseStartDate).getFullYear();
@@ -97,7 +107,15 @@ function AppContent() {
 
       // Group filter
       if (selectedGroup) {
-        if (p.groupNumber !== parseInt(selectedGroup, 10)) return false;
+        // If participant matches group with parsing checks
+        const selectedGroupNum = parseInt(selectedGroup, 10);
+        
+        // If groupInfo exists, compare numbers
+        if (groupInfo && groupInfo.groupNumber !== selectedGroupNum) {
+            return false;
+        }
+        // If groupInfo is missing (rare), assume no match if we are filtering by specific group
+        if (!groupInfo) return false;
       }
 
       // Date range filter (show participants whose course starts in the period)
@@ -125,8 +143,8 @@ function AppContent() {
   const visibleParticipants = filteredParticipants.length;
   const totalCourses = groups?.length || 0;
   const visibleCourses = useMemo(() => {
-    const uniqueGroups = new Set(filteredParticipants.map(p => p.groupNumber));
-    return uniqueGroups.size;
+    const uniquePeriods = new Set(filteredParticipants.map(p => p.courseStartDate));
+    return uniquePeriods.size;
   }, [filteredParticipants]);
 
   const completedCount = useMemo(() => {
@@ -222,7 +240,7 @@ function AppContent() {
               statusFilters
             }}
             onRemoveFilter={handleRemoveFilter}
-            groups={groups || []}
+            groups={groups?.filter(g => g.groupNumber !== null && g.groupNumber !== undefined).map(g => ({...g, groupNumber: g.groupNumber! })) || []}
           />
 
           {/* Action Buttons - Desktop only */}
@@ -313,7 +331,7 @@ function AppContent() {
         onStatusFilterChange={handleStatusFilterChange}
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
-        groups={groups || []}
+        groups={groups?.filter(g => g.groupNumber !== null && g.groupNumber !== undefined).map(g => ({...g, groupNumber: g.groupNumber! })) || []}
         onResetToDefaults={resetToDefaults}
       />
 

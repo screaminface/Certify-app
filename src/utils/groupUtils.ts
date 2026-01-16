@@ -282,32 +282,103 @@ export async function recalculateAllAutoGroups(): Promise<number> {
 /**
  * Sync groups table with current participants and maintain workflow states
  */
+/**
+ * Sync groups table with current participants and maintain workflow states
+ * 1. Ensure Active group has a groupNumber (fix data integrity)
+ * 2. Ensure groups exist for all participants
+ * 3. Ensure next 2 Planned periods exist (even if empty)
+ * 4. Cleanup old empty planned groups
+ */
 export async function syncGroups(): Promise<void> {
   const allParticipants = await db.participants.toArray();
   const allGroups = await db.groups.toArray();
+  const now = new Date().toISOString();
   
-  // Collect unique courseStart dates with participant counts
-  const dateToCount = new Map<string, number>();
-  allParticipants.forEach(p => {
-    dateToCount.set(p.courseStartDate, (dateToCount.get(p.courseStartDate) || 0) + 1);
-  });
+  // 1. Fix Active groups with missing groupNumber
+  const activeGroup = allGroups.find(g => g.status === 'active');
+  if (activeGroup && (activeGroup.groupNumber === null || activeGroup.groupNumber === undefined)) {
+    console.warn(`⚠️ Active Group found without number! Fixing...`);
+    
+    // Calculate new number
+    const existingNumbers = allGroups
+      .map(g => g.groupNumber)
+      .filter((n): n is number => n !== null && n !== undefined);
+    const maxGroupNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+    const newNumber = maxGroupNumber + 1;
+    
+    await db.groups.update(activeGroup.id, {
+      groupNumber: newNumber,
+      updatedAt: now
+    });
+    console.log(`✅ Fixed Active Group: Assigned number ${newNumber}`);
+  }
   
-  // Delete groups with no participants (except active group)
-  for (const group of allGroups) {
-    const count = dateToCount.get(group.courseStartDate) || 0;
-    if (count === 0 && group.status !== 'active') {
-      await db.groups.delete(group.id);
+  // 2. Identify all required periods
+  const requiredPeriods = new Set<string>();
+  
+  // A. Add periods from existing participants
+  allParticipants.forEach(p => requiredPeriods.add(p.courseStartDate));
+  
+  // B. Add next 2 future periods based on current state
+  // Base date is Active Group start OR current week
+  let baseDate: Date;
+  if (activeGroup) {
+    baseDate = new Date(activeGroup.courseStartDate);
+  } else {
+    // Determine next Monday from today
+    const today = new Date();
+    // Use dateUtils logic (importing logic manually here to avoid dependency cycle if any)
+    const dayOfWeek = today.getDay(); 
+    const daysUntilMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : 8 - dayOfWeek);
+    baseDate = new Date(today);
+    baseDate.setDate(today.getDate() + daysUntilMonday);
+    
+    // If today is Monday, strict logic might define if we are "in" this week or "before"
+    // For safety, let's treat next Monday as the first period
+  }
+  
+  // Generate +1 and +2 weeks ahead needed
+  const period1 = new Date(baseDate);
+  period1.setDate(period1.getDate() + 7); // Next week
+  
+  const period2 = new Date(baseDate);
+  period2.setDate(period2.getDate() + 14); // Week after next
+  
+  requiredPeriods.add(period1.toISOString().split('T')[0]);
+  requiredPeriods.add(period2.toISOString().split('T')[0]);
+
+  // 3. Ensure all required groups exist
+  const existingPeriods = new Set(allGroups.map(g => g.courseStartDate));
+  
+  for (const date of requiredPeriods) {
+    if (!existingPeriods.has(date)) {
+      console.log(`Creating missing planned group for ${date}`);
+      await createGroup(date, 'planned');
     }
   }
   
-  // Ensure groups exist for all participant courseStartDates
-  for (const [courseStartDate, _] of dateToCount.entries()) {
-    const existingGroup = allGroups.find(g => g.courseStartDate === courseStartDate);
+  // 4. Cleanup ONLY old empty planned groups (not required ones)
+  // Refresh groups list
+  const refreshedGroups = await db.groups.toArray();
+  const participantCounts = new Map<string, number>();
+  allParticipants.forEach(p => {
+    participantCounts.set(p.courseStartDate, (participantCounts.get(p.courseStartDate) || 0) + 1);
+  });
+
+  for (const group of refreshedGroups) {
+    // Only cleanup PLANNED groups
+    if (group.status !== 'planned') continue;
     
-    if (!existingGroup) {
-      // Create new planned group
-      await createGroup(courseStartDate, 'planned');
-    }
+    // Don't delete if it has participants
+    if ((participantCounts.get(group.courseStartDate) || 0) > 0) continue;
+    
+    // Don't delete if it is one of our required future periods
+    if (requiredPeriods.has(group.courseStartDate)) continue;
+    
+    // If we are here, it's an empty planned group that is NOT in the immediate future
+    // Safe to delete (e.g. was created for a participant who moved dates, or is old)
+    console.log(`Cleaning up old empty planned group: ${group.courseStartDate}`);
+    await db.groups.delete(group.id);
   }
 }
 
