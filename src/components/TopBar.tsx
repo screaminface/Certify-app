@@ -30,7 +30,7 @@ export const TopBar: React.FC<TopBarProps> = ({ activeTab, onTabChange, onBack }
           {/* Logo */}
           <div className="flex-shrink-0 w-14 h-14 md:w-16 md:h-16 bg-white rounded-md flex items-center justify-center overflow-hidden">
             <img 
-              src="/Logo.svg" 
+              src="./Logo.svg"
               alt="Logo" 
               className="w-full h-full object-cover scale-[2.4]"
             />

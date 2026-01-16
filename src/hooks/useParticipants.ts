@@ -4,7 +4,7 @@ import { db, Participant } from '../db/database';
 import { computeCourseDates } from '../utils/dateUtils';
 import { generateNextUniqueNumber, isUniqueNumberAvailable } from '../utils/uniqueNumberUtils';
 import { recalculateAllAutoGroups, syncGroups, getSuggestedGroup, createGroup, getActiveGroup, isGroupReadOnly } from '../utils/groupUtils';
-import { isMedicalDateValid, isMedicalValidForCourse, MEDICAL_EXPIRED_MESSAGE } from '../utils/medicalValidation';
+import { isMedicalValidForCourse, MEDICAL_EXPIRED_MESSAGE } from '../utils/medicalValidation';
 
 export interface ParticipantInput {
   companyName: string;
@@ -13,7 +13,6 @@ export interface ParticipantInput {
   birthPlace: string;
   citizenship: string;
   medicalDate: string;
-  groupNumber?: number; // Optional for manual assignment
   uniqueNumber?: string; // Optional for manual assignment
 }
 
@@ -25,13 +24,14 @@ export function useParticipants() {
 
   // Add a new participant
   const addParticipant = async (input: ParticipantInput): Promise<Participant> => {
-    // MEDICAL VALIDATION - Hard block
-    if (!isMedicalDateValid(input.medicalDate)) {
+    // Compute course dates first
+    const { courseStartDate, courseEndDate } = computeCourseDates(input.medicalDate);
+
+    // MEDICAL VALIDATION - Check if medical is valid for this course
+    // Medical must be within 6 months BEFORE the course start date
+    if (!isMedicalValidForCourse(input.medicalDate, courseStartDate)) {
       throw new Error(MEDICAL_EXPIRED_MESSAGE);
     }
-
-    // Compute course dates
-    const { courseStartDate, courseEndDate } = computeCourseDates(input.medicalDate);
 
     // Determine group assignment
     let groupNumber: number;
@@ -170,12 +170,15 @@ export function useParticipants() {
 
     // If medical date changed, validate it
     if (updates.medicalDate && updates.medicalDate !== participant.medicalDate) {
-      if (!isMedicalDateValid(updates.medicalDate)) {
+      // Compute new course dates
+      const { courseStartDate, courseEndDate } = computeCourseDates(updates.medicalDate);
+      
+      // Validate medical is valid for this course
+      if (!isMedicalValidForCourse(updates.medicalDate, courseStartDate)) {
         throw new Error(MEDICAL_EXPIRED_MESSAGE);
       }
 
       participantUpdates.medicalDate = updates.medicalDate;
-      const { courseStartDate, courseEndDate } = computeCourseDates(updates.medicalDate);
       participantUpdates.courseStartDate = courseStartDate;
       participantUpdates.courseEndDate = courseEndDate;
       

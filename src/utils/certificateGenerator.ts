@@ -54,8 +54,9 @@ export async function generateCertificate(
     console.log(`📋 Group ${group.groupNumber} => F08 = ${protocolNumber}`);
 
     // Fetch the template from public folder
-    console.log('📄 Fetching template from /template.docx...');
-    const response = await fetch('/template.docx');
+    console.log('📄 Fetching template from /Certify-app/template.docx...');
+    const templatePath = '/Certify-app/template.docx';
+    const response = await fetch(templatePath);
     
     if (!response.ok) {
       console.error('❌ Template fetch failed:', response.status, response.statusText);

@@ -1,6 +1,10 @@
 import { subMonths, parseISO, format, parse, isBefore, isEqual } from 'date-fns';
 
 /**
+ * @deprecated DO NOT USE - This function is conceptually wrong
+ * Medical validity should be checked against COURSE START DATE, not current date
+ * Use isMedicalValidForCourse() instead
+ * 
  * Check if medical date is valid (not older than 6 calendar months from today)
  * @param medicalDate ISO date string (YYYY-MM-DD)
  * @returns true if valid, false if expired
@@ -67,4 +71,4 @@ export function parseDateBG(bgDate: string): string {
 /**
  * Get the medical validity message
  */
-export const MEDICAL_EXPIRED_MESSAGE = 'Медицинското е по-старо от 6 месеца и не може да бъде използвано.';
+export const MEDICAL_EXPIRED_MESSAGE = 'Медицинското трябва да е в рамките на 6 месеца преди началото на курса.';

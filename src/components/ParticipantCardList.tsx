@@ -1,17 +1,18 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Participant, db } from '../db/database';
-import { useParticipants } from '../hooks/useParticipants';
-import { useLanguage } from '../contexts/LanguageContext';
-import { KebabMenu } from './ui/KebabMenu';
-import { StatusChip } from './ui/StatusChip';
-import { Badge } from './ui/Badge';
-import { ConfirmModal } from './ui/ConfirmModal';
-import { CompanyBadge } from './ui/CompanyBadge';
-import { BulkActionBar } from './ui/BulkActionBar';
-import { GroupSection } from './ui/GroupSection';
-import { ArchivedGroupAccordion } from './ui/ArchivedGroupAccordion';
-import { formatDateBG } from '../utils/medicalValidation';
-import { useLiveQuery } from 'dexie-react-hooks';
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Participant, db } from "../db/database";
+import { useParticipants } from "../hooks/useParticipants";
+import { useLanguage } from "../contexts/LanguageContext";
+import { KebabMenu } from "./ui/KebabMenu";
+import { StatusChip } from "./ui/StatusChip";
+import { Badge } from "./ui/Badge";
+import { ConfirmModal } from "./ui/ConfirmModal";
+import { CompanyBadge } from "./ui/CompanyBadge";
+import { BulkActionBar } from "./ui/BulkActionBar";
+import { GroupSection } from "./ui/GroupSection";
+import { ArchivedGroupAccordion } from "./ui/ArchivedGroupAccordion";
+import { formatDateBG } from "../utils/medicalValidation";
+import { generateCertificate } from "../utils/certificateGenerator";
+import { useLiveQuery } from "dexie-react-hooks";
 
 interface ParticipantCardListProps {
   participants: Participant[];
@@ -23,12 +24,13 @@ interface ParticipantCardListProps {
     planned: boolean;
     completed: boolean;
   };
-  toggleSection: (section: 'active' | 'planned' | 'completed') => void;
-  expandSection: (section: 'active' | 'planned' | 'completed') => void;
+  toggleSection: (section: "active" | "planned" | "completed") => void;
+  expandSection: (section: "active" | "planned" | "completed") => void;
   hasActiveFilters: boolean;
 }
 
 export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
+  // ...existing code...
   participants,
   onEdit,
   onDelete,
@@ -36,21 +38,26 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
   collapsedSections,
   toggleSection,
   expandSection,
-  hasActiveFilters
+  hasActiveFilters,
 }) => {
   const { t } = useLanguage();
   const { updateParticipant } = useParticipants();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; participant?: Participant }>({
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(
+    null
+  );
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    participant?: Participant;
+  }>({
     isOpen: false,
-    participant: undefined
+    participant: undefined,
   });
 
   const groups = useLiveQuery(() => db.groups.toArray(), []);
   const groupMap = useMemo(() => {
     if (!groups) return new Map();
-    return new Map(groups.map(g => [g.groupNumber, g]));
+    return new Map(groups.map((g) => [g.groupNumber, g]));
   }, [groups]);
 
   // Group participants by group status
@@ -59,18 +66,18 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     const planned: Participant[] = [];
     const completed: Participant[] = [];
 
-    participants.forEach(p => {
+    participants.forEach((p) => {
       const group = groupMap.get(p.groupNumber);
       if (!group) {
         active.push(p);
         return;
       }
 
-      if (group.status === 'active') {
+      if (group.status === "active") {
         active.push(p);
-      } else if (group.status === 'planned') {
+      } else if (group.status === "planned") {
         planned.push(p);
-      } else if (group.status === 'completed') {
+      } else if (group.status === "completed") {
         completed.push(p);
       }
     });
@@ -80,47 +87,53 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
   // Group planned participants by group number for visual separation
   const plannedGroupedByNumber = useMemo(() => {
-    const grouped = new Map<number, { group: any; participants: Participant[] }>();
-    
-    participantsByStatus.planned.forEach(p => {
+    const grouped = new Map<
+      number,
+      { group: any; participants: Participant[] }
+    >();
+
+    participantsByStatus.planned.forEach((p) => {
       const group = groupMap.get(p.groupNumber);
       if (!group) return;
-      
+
       if (!grouped.has(p.groupNumber)) {
         grouped.set(p.groupNumber, { group, participants: [] });
       }
       grouped.get(p.groupNumber)!.participants.push(p);
     });
-    
+
     // Sort by group number ascending (earliest first)
     return Array.from(grouped.entries())
       .sort(([a], [b]) => a - b)
       .map(([groupNumber, data]) => ({
         groupNumber,
-        ...data
+        ...data,
       }));
   }, [participantsByStatus.planned, groupMap]);
 
   // Group completed participants by group for accordion display
   const completedGroupedByNumber = useMemo(() => {
-    const grouped = new Map<number, { group: any; participants: Participant[] }>();
-    
-    participantsByStatus.completed.forEach(p => {
+    const grouped = new Map<
+      number,
+      { group: any; participants: Participant[] }
+    >();
+
+    participantsByStatus.completed.forEach((p) => {
       const group = groupMap.get(p.groupNumber);
       if (!group) return;
-      
+
       if (!grouped.has(p.groupNumber)) {
         grouped.set(p.groupNumber, { group, participants: [] });
       }
       grouped.get(p.groupNumber)!.participants.push(p);
     });
-    
+
     // Sort by group number descending (newest first)
     return Array.from(grouped.entries())
       .sort(([a], [b]) => b - a)
       .map(([groupNumber, data]) => ({
         groupNumber,
-        ...data
+        ...data,
       }));
   }, [participantsByStatus.completed, groupMap]);
 
@@ -130,23 +143,27 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     const plannedGroups = new Set<number>();
     const completedGroups = new Set<number>();
 
-    participantsByStatus.active.forEach(p => activeGroups.add(p.groupNumber));
-    participantsByStatus.planned.forEach(p => plannedGroups.add(p.groupNumber));
-    participantsByStatus.completed.forEach(p => completedGroups.add(p.groupNumber));
+    participantsByStatus.active.forEach((p) => activeGroups.add(p.groupNumber));
+    participantsByStatus.planned.forEach((p) =>
+      plannedGroups.add(p.groupNumber)
+    );
+    participantsByStatus.completed.forEach((p) =>
+      completedGroups.add(p.groupNumber)
+    );
 
     return {
       active: {
         count: activeGroups.size,
-        numbers: Array.from(activeGroups).sort((a, b) => a - b)
+        numbers: Array.from(activeGroups).sort((a, b) => a - b),
       },
       planned: {
         count: plannedGroups.size,
-        numbers: Array.from(plannedGroups).sort((a, b) => a - b)
+        numbers: Array.from(plannedGroups).sort((a, b) => a - b),
       },
       completed: {
         count: completedGroups.size,
-        numbers: Array.from(completedGroups).sort((a, b) => a - b)
-      }
+        numbers: Array.from(completedGroups).sort((a, b) => a - b),
+      },
     };
   }, [participantsByStatus]);
 
@@ -155,43 +172,58 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
   useEffect(() => {
     if (prevParticipantsRef.current !== participants && hasActiveFilters) {
       if (participantsByStatus.active.length > 0 && collapsedSections.active) {
-        expandSection('active');
+        expandSection("active");
       }
-      if (participantsByStatus.planned.length > 0 && collapsedSections.planned) {
-        expandSection('planned');
+      if (
+        participantsByStatus.planned.length > 0 &&
+        collapsedSections.planned
+      ) {
+        expandSection("planned");
       }
-      if (participantsByStatus.completed.length > 0 && collapsedSections.completed) {
-        expandSection('completed');
+      if (
+        participantsByStatus.completed.length > 0 &&
+        collapsedSections.completed
+      ) {
+        expandSection("completed");
       }
       prevParticipantsRef.current = participants;
     }
-  }, [participants, participantsByStatus, collapsedSections, expandSection, hasActiveFilters]);
+  }, [
+    participants,
+    participantsByStatus,
+    collapsedSections,
+    expandSection,
+    hasActiveFilters,
+  ]);
 
   // Notify parent about selection changes
   useEffect(() => {
     onSelectionChange?.(selectedIds.size > 0);
   }, [selectedIds.size, onSelectionChange]);
 
-  const handleCheckboxChange = async (participant: Participant, field: 'sent' | 'documents' | 'handedOver' | 'paid') => {
+  const handleCheckboxChange = async (
+    participant: Participant,
+    field: "sent" | "documents" | "handedOver" | "paid"
+  ) => {
     // Check if group is locked
     const group = groupMap.get(participant.groupNumber);
-    if (group && group.status === 'completed' && group.isLocked) {
-      alert(t('lock.lockedInfo'));
+    if (group && group.status === "completed" && group.isLocked) {
+      alert(t("lock.lockedInfo"));
       return;
     }
 
     try {
       await updateParticipant(participant.id, {
-        [field]: !participant[field]
+        [field]: !participant[field],
       });
     } catch (error) {
-      console.error('Error updating participant:', error);
+      console.error("Error updating participant:", error);
     }
   };
 
   const getCompletedValue = (participant: Participant): boolean => {
-    return participant.completedOverride !== null 
-      ? participant.completedOverride 
+    return participant.completedOverride !== null
+      ? participant.completedOverride
       : participant.completedComputed;
   };
 
@@ -201,14 +233,14 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
   const isGroupLocked = (participant: Participant): boolean => {
     const group = groupMap.get(participant.groupNumber);
-    return group ? group.status === 'completed' && group.isLocked : false;
+    return group ? group.status === "completed" && group.isLocked : false;
   };
 
   // Selection handlers
   const handleLongPressStart = (id: string, participant: Participant) => {
     // Don't allow selection of locked participants
     if (isGroupLocked(participant)) return;
-    
+
     const timer = setTimeout(() => {
       setSelectedIds(new Set([id]));
     }, 500); // 500ms long press
@@ -224,11 +256,9 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
   const handleCardClick = (id: string, participant: Participant) => {
     const isLocked = isGroupLocked(participant);
-    
     if (selectedIds.size > 0) {
-      // In selection mode - toggle selection (but not for locked)
+      // In selection mode - toggle selection (но не и за заключени)
       if (isLocked) return;
-      
       const newSelection = new Set(selectedIds);
       if (newSelection.has(id)) {
         newSelection.delete(id);
@@ -236,10 +266,8 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         newSelection.add(id);
       }
       setSelectedIds(newSelection);
-    } else {
-      // Normal mode - open edit
-      onEdit(participant);
     }
+    // В нормален режим не правим нищо при клик (edit само през менюто)
   };
 
   const handleClearSelection = () => {
@@ -261,6 +289,20 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     setDeleteConfirm({ isOpen: false, participant: undefined });
   };
 
+  const handleGenerateCertificate = async (participant: Participant) => {
+    try {
+      const group = groupMap.get(participant.groupNumber);
+      if (!group) {
+        alert('Грешка: Групата не е намерена');
+        return;
+      }
+      await generateCertificate(participant, group);
+      alert('Сертификатът е генериран успешно!');
+    } catch (error) {
+      alert('Грешка при генериране на сертификат: ' + (error as Error).message);
+    }
+  };
+
   // Render a participant card
   const renderParticipantCard = (participant: Participant, _index?: number) => {
     const isSelected = selectedIds.has(participant.id);
@@ -276,12 +318,10 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         onMouseUp={handleLongPressEnd}
         onMouseLeave={handleLongPressEnd}
         className={`bg-white rounded-lg shadow-sm p-4 border transition-all duration-150 ${
-          isSelected 
-            ? 'border-blue-500 ring-2 ring-blue-200' 
-            : 'border-slate-200'
-        } ${
-          isLocked ? 'opacity-75' : 'cursor-pointer hover:shadow-md'
-        }`}
+          isSelected
+            ? "border-blue-500 ring-2 ring-blue-200"
+            : "border-slate-200"
+        } ${isLocked ? "opacity-75" : "cursor-pointer hover:shadow-md"}`}
       >
         {/* Header with Kebab Menu */}
         <div className="flex justify-between items-start mb-3">
@@ -289,14 +329,29 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             <div className="flex items-center gap-2 mb-1">
               {isSelected && (
                 <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center">
-                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  <svg
+                    className="w-3 h-3 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={3}
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                 </div>
               )}
-              <h3 className="font-bold text-lg text-slate-900">{participant.personName}</h3>
+              <h3 className="font-bold text-lg text-slate-900">
+                {participant.personName}
+              </h3>
               {isLocked && (
-                <span className="text-xs text-slate-500" title={t('lock.lockedInfo')}>
+                <span
+                  className="text-xs text-slate-500"
+                  title={t("lock.lockedInfo")}
+                >
                   🔒
                 </span>
               )}
@@ -312,18 +367,29 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
               </span>
               <div className="flex gap-1">
                 <Badge
-                  label={getCompletedValue(participant) ? t('participant.completedBadge') : t('participant.notCompleted')}
-                  variant={getCompletedValue(participant) ? 'success' : 'neutral'}
-                  icon={getCompletedValue(participant) ? 'check' : undefined}
+                  label={
+                    getCompletedValue(participant)
+                      ? t("participant.completedBadge")
+                      : t("participant.notCompleted")
+                  }
+                  variant={
+                    getCompletedValue(participant) ? "success" : "neutral"
+                  }
+                  icon={getCompletedValue(participant) ? "check" : undefined}
                 />
                 {isCompletedOverridden(participant) && (
-                  <Badge label={t('participant.manual')} variant="info" icon="manual" />
+                  <Badge
+                    label={t("participant.manual")}
+                    variant="info"
+                    icon="manual"
+                  />
                 )}
               </div>
             </div>
             {!isLocked && (
               <KebabMenu
                 onEdit={() => onEdit(participant)}
+                onGenerate={() => handleGenerateCertificate(participant)}
                 onDelete={() => handleDeleteClick(participant)}
               />
             )}
@@ -333,64 +399,88 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         {/* Dates and Group */}
         <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
           <div>
-            <span className="text-slate-500">{t('participant.medical')}:</span>
-            <span className="ml-1 font-medium text-slate-900">{formatDateBG(participant.medicalDate)}</span>
+            <span className="text-slate-500">{t("participant.medical")}:</span>
+            <span className="ml-1 font-medium text-slate-900">
+              {formatDateBG(participant.medicalDate)}
+            </span>
           </div>
           <div>
-            <span className="text-slate-500">{t('participant.group')}:</span>
-            <span className="ml-1 font-medium text-slate-900">{participant.groupNumber}</span>
+            <span className="text-slate-500">{t("participant.group")}:</span>
+            <span className="ml-1 font-medium text-slate-900">
+              {participant.groupNumber}
+            </span>
           </div>
           <div>
-            <span className="text-slate-500">{t('participant.courseStart')}:</span>
-            <span className="ml-1 font-medium text-slate-900">{formatDateBG(participant.courseStartDate)}</span>
+            <span className="text-slate-500">
+              {t("participant.courseStart")}:
+            </span>
+            <span className="ml-1 font-medium text-slate-900">
+              {formatDateBG(participant.courseStartDate)}
+            </span>
           </div>
           <div>
-            <span className="text-slate-500">{t('participant.courseEnd')}:</span>
-            <span className="ml-1 font-medium text-slate-900">{formatDateBG(participant.courseEndDate)}</span>
+            <span className="text-slate-500">
+              {t("participant.courseEnd")}:
+            </span>
+            <span className="ml-1 font-medium text-slate-900">
+              {formatDateBG(participant.courseEndDate)}
+            </span>
           </div>
         </div>
 
         {/* Status Chips */}
         <div className="flex gap-1">
-          <button 
+          <button
             onClick={(e) => {
               e.stopPropagation();
-              handleCheckboxChange(participant, 'sent');
-            }} 
+              handleCheckboxChange(participant, "sent");
+            }}
             disabled={isLocked}
             className="active:scale-95 transition-transform duration-150 flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <StatusChip label={t('participant.sent')} isActive={participant.sent} />
+            <StatusChip
+              label={t("participant.sent")}
+              isActive={participant.sent}
+            />
           </button>
-          <button 
+          <button
             onClick={(e) => {
               e.stopPropagation();
-              handleCheckboxChange(participant, 'documents');
-            }} 
+              handleCheckboxChange(participant, "documents");
+            }}
             disabled={isLocked}
             className="active:scale-95 transition-transform duration-150 flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <StatusChip label={t('participant.documents')} isActive={participant.documents} />
+            <StatusChip
+              label={t("participant.documents")}
+              isActive={participant.documents}
+            />
           </button>
-          <button 
+          <button
             onClick={(e) => {
               e.stopPropagation();
-              handleCheckboxChange(participant, 'handedOver');
-            }} 
+              handleCheckboxChange(participant, "handedOver");
+            }}
             disabled={isLocked}
             className="active:scale-95 transition-transform duration-150 flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <StatusChip label={t('participant.handed')} isActive={participant.handedOver} />
+            <StatusChip
+              label={t("participant.handed")}
+              isActive={participant.handedOver}
+            />
           </button>
-          <button 
+          <button
             onClick={(e) => {
               e.stopPropagation();
-              handleCheckboxChange(participant, 'paid');
-            }} 
+              handleCheckboxChange(participant, "paid");
+            }}
             disabled={isLocked}
             className="active:scale-95 transition-transform duration-150 flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <StatusChip label={t('participant.paid')} isActive={participant.paid} />
+            <StatusChip
+              label={t("participant.paid")}
+              isActive={participant.paid}
+            />
           </button>
         </div>
       </div>
@@ -399,8 +489,11 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
   // Simplified render for archived participants (read-only card)
   const renderArchivedParticipantCard = (participant: Participant) => {
-    const completed = participant.completedOverride !== null ? participant.completedOverride : participant.completedComputed;
-    
+    const completed =
+      participant.completedOverride !== null
+        ? participant.completedOverride
+        : participant.completedComputed;
+
     return (
       <div
         key={participant.id}
@@ -408,37 +501,66 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
       >
         <div className="flex justify-between items-start mb-2">
           <div>
-            <h4 className="font-semibold text-slate-900">{participant.personName}</h4>
+            <h4 className="font-semibold text-slate-900">
+              {participant.personName}
+            </h4>
             <CompanyBadge companyName={participant.companyName} />
           </div>
           <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-700">
             {participant.uniqueNumber}
           </span>
         </div>
-        
+
         <div className="text-sm text-slate-600 mb-2">
-          <div>{t('participant.medical')}: {formatDateBG(participant.medicalDate)}</div>
+          <div>
+            {t("participant.medical")}: {formatDateBG(participant.medicalDate)}
+          </div>
         </div>
 
         <div className="flex gap-2 flex-wrap">
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
-            <input type="checkbox" checked={participant.sent} disabled className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed" />
+            <input
+              type="checkbox"
+              checked={participant.sent}
+              disabled
+              className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
+            />
             Изпратен
           </label>
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
-            <input type="checkbox" checked={participant.documents} disabled className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed" />
+            <input
+              type="checkbox"
+              checked={participant.documents}
+              disabled
+              className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
+            />
             Документи
           </label>
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
-            <input type="checkbox" checked={participant.handedOver} disabled className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed" />
+            <input
+              type="checkbox"
+              checked={participant.handedOver}
+              disabled
+              className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
+            />
             Предаден
           </label>
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
-            <input type="checkbox" checked={participant.paid} disabled className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed" />
+            <input
+              type="checkbox"
+              checked={participant.paid}
+              disabled
+              className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
+            />
             Платен
           </label>
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
-            <input type="checkbox" checked={completed} disabled className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed" />
+            <input
+              type="checkbox"
+              checked={completed}
+              disabled
+              className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
+            />
             Завършен
           </label>
         </div>
@@ -449,7 +571,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
   if (participants.length === 0) {
     return (
       <div className="text-center py-12 text-slate-500">
-        {t('participants.noResults')}
+        {t("participants.noResults")}
       </div>
     );
   }
@@ -462,21 +584,23 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         onClearSelection={handleClearSelection}
         onActionComplete={handleBulkActionComplete}
       />
-      
+
       {/* Group Sections */}
       <div className="space-y-4 pb-32">
         {/* Active Groups Section */}
         {participantsByStatus.active.length > 0 && (
           <GroupSection
-            title={t('groups.activeSection')}
+            title={t("groups.activeSection")}
             count={groupStats.active.count}
             groupNumbers={groupStats.active.numbers}
             isCollapsed={collapsedSections.active}
-            onToggle={() => toggleSection('active')}
+            onToggle={() => toggleSection("active")}
             variant="active"
           >
             <div className="space-y-4">
-              {participantsByStatus.active.map((p, i) => renderParticipantCard(p, i))}
+              {participantsByStatus.active.map((p, i) =>
+                renderParticipantCard(p, i)
+              )}
             </div>
           </GroupSection>
         )}
@@ -484,35 +608,44 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         {/* Planned Groups Section */}
         {participantsByStatus.planned.length > 0 && (
           <GroupSection
-            title={t('groups.plannedSection')}
+            title={t("groups.plannedSection")}
             count={groupStats.planned.count}
             groupNumbers={groupStats.planned.numbers}
             isCollapsed={collapsedSections.planned}
-            onToggle={() => toggleSection('planned')}
+            onToggle={() => toggleSection("planned")}
             variant="planned"
           >
             <div className="space-y-3">
-              {plannedGroupedByNumber.map(({ groupNumber, group, participants }) => (
-                <div key={groupNumber} className="bg-white border-2 border-amber-200 rounded-lg overflow-hidden">
-                  {/* Group Header */}
-                  <div className="bg-amber-50 px-3 py-2 border-b border-amber-200">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-amber-900">Група {groupNumber}</span>
-                      <span className="text-xs text-amber-700 font-medium">
-                        {participants.length} {participants.length === 1 ? 'участник' : 'участника'}
-                      </span>
+              {plannedGroupedByNumber.map(
+                ({ groupNumber, group, participants }) => (
+                  <div
+                    key={groupNumber}
+                    className="bg-white border-2 border-amber-200 rounded-lg overflow-hidden"
+                  >
+                    {/* Group Header */}
+                    <div className="bg-amber-50 px-3 py-2 border-b border-amber-200">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-amber-900">
+                          Група {groupNumber}
+                        </span>
+                        <span className="text-xs text-amber-700 font-medium">
+                          {participants.length}{" "}
+                          {participants.length === 1 ? "участник" : "участника"}
+                        </span>
+                      </div>
+                      <div className="text-xs text-amber-700 mt-0.5">
+                        {formatDateBG(group.courseStartDate)} -{" "}
+                        {formatDateBG(group.courseEndDate)}
+                      </div>
                     </div>
-                    <div className="text-xs text-amber-700 mt-0.5">
-                      {formatDateBG(group.courseStartDate)} - {formatDateBG(group.courseEndDate)}
+
+                    {/* Group Cards */}
+                    <div className="p-2 space-y-2">
+                      {participants.map((p, i) => renderParticipantCard(p, i))}
                     </div>
                   </div>
-                  
-                  {/* Group Cards */}
-                  <div className="p-2 space-y-2">
-                    {participants.map((p, i) => renderParticipantCard(p, i))}
-                  </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           </GroupSection>
         )}
@@ -520,24 +653,26 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         {/* Completed Groups Section (Archive) */}
         {participantsByStatus.completed.length > 0 && (
           <GroupSection
-            title={t('groups.completedSection')}
+            title={t("groups.completedSection")}
             count={groupStats.completed.count}
             isCollapsed={collapsedSections.completed}
-            onToggle={() => toggleSection('completed')}
+            onToggle={() => toggleSection("completed")}
             variant="completed"
           >
             <div className="space-y-2">
-              {completedGroupedByNumber.map(({ groupNumber, group, participants }) => (
-                <ArchivedGroupAccordion
-                  key={groupNumber}
-                  groupNumber={groupNumber}
-                  courseStartDate={group.courseStartDate}
-                  courseEndDate={group.courseEndDate}
-                  participants={participants}
-                  renderParticipantRow={renderArchivedParticipantCard}
-                  mode="cards"
-                />
-              ))}
+              {completedGroupedByNumber.map(
+                ({ groupNumber, group, participants }) => (
+                  <ArchivedGroupAccordion
+                    key={groupNumber}
+                    groupNumber={groupNumber}
+                    courseStartDate={group.courseStartDate}
+                    courseEndDate={group.courseEndDate}
+                    participants={participants}
+                    renderParticipantRow={renderArchivedParticipantCard}
+                    mode="cards"
+                  />
+                )
+              )}
             </div>
           </GroupSection>
         )}
@@ -546,12 +681,16 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
       {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={deleteConfirm.isOpen}
-        onClose={() => setDeleteConfirm({ isOpen: false, participant: undefined })}
+        onClose={() =>
+          setDeleteConfirm({ isOpen: false, participant: undefined })
+        }
         onConfirm={confirmDelete}
-        title={t('modal.deleteTitle')}
-        message={t('modal.deleteMessage', { name: deleteConfirm.participant?.personName || '' })}
-        confirmText={t('common.delete')}
-        cancelText={t('common.cancel')}
+        title={t("modal.deleteTitle")}
+        message={t("modal.deleteMessage", {
+          name: deleteConfirm.participant?.personName || "",
+        })}
+        confirmText={t("common.delete")}
+        cancelText={t("common.cancel")}
         variant="danger"
       />
     </>

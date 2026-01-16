@@ -125,12 +125,13 @@ export async function getPlannedGroups(): Promise<Group[]> {
 
 /**
  * Get suggested group for a courseStartDate
- * Returns active group if it matches, or finds/creates planned group
+ * Returns active group if it matches AND is not completed, or finds/creates planned group
+ * NEVER returns a completed group
  */
 export async function getSuggestedGroup(courseStartDate: string): Promise<{ group: Group | null; shouldCreate: boolean }> {
-  // Check if active group matches
+  // Check if active group matches AND is not completed
   const activeGroup = await getActiveGroup();
-  if (activeGroup && activeGroup.courseStartDate === courseStartDate) {
+  if (activeGroup && activeGroup.courseStartDate === courseStartDate && activeGroup.status !== 'completed') {
     return { group: activeGroup, shouldCreate: false };
   }
   
@@ -145,7 +146,11 @@ export async function getSuggestedGroup(courseStartDate: string): Promise<{ grou
     return { group: plannedGroup, shouldCreate: false };
   }
   
-  // No group exists - should create planned group
+  // No suitable group exists - should create planned group
+  // This happens when:
+  // 1. No active group exists
+  // 2. Active group exists but has different date
+  // 3. Active group is completed (archived)
   return { group: null, shouldCreate: true };
 }
 

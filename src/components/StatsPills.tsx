@@ -26,20 +26,20 @@ export const StatsPills: React.FC<StatsPillsProps> = ({
       <div className="md:hidden">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full bg-white rounded-lg px-4 py-3 shadow-sm border border-slate-200 flex items-center justify-between mb-2"
+          className="w-full bg-white rounded-lg px-2 py-2 shadow-sm border border-slate-200 flex items-center justify-between mb-1"
         >
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <div className="text-left">
-              <div className="text-xs font-medium text-slate-500">{t('participants.showing')}</div>
-              <div className="text-xl font-bold text-blue-600">{visibleParticipants}/{totalParticipants}</div>
+              <div className="text-[11px] font-medium text-slate-500">{t('participants.showing')}</div>
+              <div className="text-lg font-bold text-blue-600">{visibleParticipants}/{totalParticipants}</div>
             </div>
             <div className="text-left">
-              <div className="text-xs font-medium text-slate-500">{t('participant.completed')}</div>
-              <div className="text-xl font-bold text-emerald-700">{completedCount}</div>
+              <div className="text-[11px] font-medium text-slate-500">{t('participant.completed')}</div>
+              <div className="text-lg font-bold text-emerald-700">{completedCount}</div>
             </div>
           </div>
           <svg
-            className={`w-5 h-5 text-slate-500 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+            className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -47,70 +47,76 @@ export const StatsPills: React.FC<StatsPillsProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
-        
+
         {isExpanded && (
-          <div className="grid grid-cols-1 gap-3 mb-2">
+          <div className="grid grid-cols-2 gap-2 mb-1">
             {/* Total */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 border-l-4 border-l-slate-400">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm uppercase tracking-wide text-slate-900 font-semibold whitespace-nowrap">{t('participants.total')}</div>
-                <div className="bg-slate-50 rounded-full p-2">
-                  <Users className="w-4 h-4 text-slate-600" strokeWidth={2} />
+            <div className="bg-white rounded-xl p-2 shadow-sm border border-slate-200 border-l-4 border-l-slate-400">
+              <div className="flex items-center justify-between mb-0.5">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-slate-900 font-semibold whitespace-nowrap">{t('participants.total')}</div>
+                  <div className="text-[9px] text-transparent font-medium mt-0.5 select-none">&nbsp;</div>
+                </div>
+                <div className="bg-slate-50 rounded-full p-1">
+                  <Users className="w-3.5 h-3.5 text-slate-600" strokeWidth={2} />
                 </div>
               </div>
-              <div className="text-3xl font-semibold tracking-tight text-slate-900">{totalParticipants}</div>
+              <div className="text-2xl font-semibold tracking-tight text-slate-900">{totalParticipants}</div>
             </div>
-            
+
             {/* Showing */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 border-l-4 border-l-blue-500">
-              <div className="flex items-center justify-between mb-1">
+            <div className="bg-white rounded-xl p-2 shadow-sm border border-slate-200 border-l-4 border-l-blue-500">
+              <div className="flex items-center justify-between mb-0.5">
                 <div>
-                  <div className="text-base uppercase tracking-wide text-blue-600 font-semibold whitespace-nowrap">{t('participants.showing')}</div>
-                  <div className="text-[10px] text-slate-500 font-medium mt-0.5">{t('participants.showingSubtext')}</div>
+                  <div className="text-xs uppercase tracking-wide text-blue-600 font-semibold whitespace-nowrap">{t('participants.showing')}</div>
+                  <div className="text-[9px] text-slate-500 font-medium mt-0.5">{t('participants.showingSubtext')}</div>
                 </div>
-                <div className="bg-slate-50 rounded-full p-2">
-                  <Eye className="w-4 h-4 text-blue-600" strokeWidth={2} />
+                <div className="bg-slate-50 rounded-full p-1">
+                  <Eye className="w-3.5 h-3.5 text-blue-600" strokeWidth={2} />
                 </div>
               </div>
-              <div className="text-4xl font-semibold tracking-tight text-blue-600">{visibleParticipants}</div>
+              <div className="text-2xl font-semibold tracking-tight text-blue-600">{visibleParticipants}</div>
             </div>
-            
+
             {/* Total Courses */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 border-l-4 border-l-indigo-500">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm uppercase tracking-wide text-indigo-600 font-semibold whitespace-nowrap">{t('participants.totalCourses')}</div>
-                <div className="bg-slate-50 rounded-full p-2">
-                  <Layers className="w-4 h-4 text-indigo-600" strokeWidth={2} />
-                </div>
-              </div>
-              <div className="text-3xl font-semibold tracking-tight text-indigo-600">{totalCourses}</div>
-            </div>
-            
-            {/* Visible Courses */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 border-l-4 border-l-cyan-500">
-              <div className="flex items-center justify-between mb-1">
+            <div className="bg-white rounded-xl p-2 shadow-sm border border-slate-200 border-l-4 border-l-indigo-500">
+              <div className="flex items-center justify-between mb-0.5">
                 <div>
-                  <div className="text-base uppercase tracking-wide text-cyan-600 font-semibold whitespace-nowrap">{t('participants.visibleCourses')}</div>
-                  <div className="text-[10px] text-slate-500 font-medium mt-0.5">{t('participants.visibleCoursesSubtext')}</div>
+                  <div className="text-xs uppercase tracking-wide text-indigo-600 font-semibold whitespace-nowrap">{t('participants.totalCourses')}</div>
+                  <div className="text-[9px] text-transparent font-medium mt-0.5 select-none">&nbsp;</div>
                 </div>
-                <div className="bg-slate-50 rounded-full p-2">
-                  <CheckCircle className="w-4 h-4 text-cyan-600" strokeWidth={2} />
+                <div className="bg-slate-50 rounded-full p-1">
+                  <Layers className="w-3.5 h-3.5 text-indigo-600" strokeWidth={2} />
                 </div>
               </div>
-              <div className="text-4xl font-semibold tracking-tight text-cyan-600">{visibleCourses}</div>
+              <div className="text-2xl font-semibold tracking-tight text-indigo-600">{totalCourses}</div>
+            </div>
+
+            {/* Visible Courses */}
+            <div className="bg-white rounded-xl p-2 shadow-sm border border-slate-200 border-l-4 border-l-cyan-500">
+              <div className="flex items-center justify-between mb-0.5">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-cyan-600 font-semibold whitespace-nowrap">{t('participants.visibleCourses')}</div>
+                  <div className="text-[9px] text-slate-500 font-medium mt-0.5">{t('participants.visibleCoursesSubtext')}</div>
+                </div>
+                <div className="bg-slate-50 rounded-full p-1">
+                  <CheckCircle className="w-3.5 h-3.5 text-cyan-600" strokeWidth={2} />
+                </div>
+              </div>
+              <div className="text-2xl font-semibold tracking-tight text-cyan-600">{visibleCourses}</div>
             </div>
 
             {/* Completed */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 border-l-4 border-l-amber-500 col-span-2">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm uppercase tracking-wide text-amber-600 font-semibold whitespace-nowrap">{t('participants.completed')}</div>
-                <div className="bg-slate-50 rounded-full p-2">
-                  <GraduationCap className="w-4 h-4 text-amber-600" strokeWidth={2} />
+            <div className="bg-white rounded-xl p-2 shadow-sm border border-slate-200 border-l-4 border-l-amber-500 col-span-2">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs uppercase tracking-wide text-amber-600 font-semibold whitespace-nowrap">{t('participants.completed')}</div>
+                <div className="bg-slate-50 rounded-full p-1">
+                  <GraduationCap className="w-3.5 h-3.5 text-amber-600" strokeWidth={2} />
                 </div>
               </div>
-              <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-semibold tracking-tight text-amber-600">{completedCount}</div>
-                <div className="text-sm text-slate-500">/ {visibleParticipants} ({visibleParticipants > 0 ? Math.round((completedCount / visibleParticipants) * 100) : 0}%)</div>
+              <div className="flex items-baseline gap-1">
+                <div className="text-xl font-semibold tracking-tight text-amber-600">{completedCount}</div>
+                <div className="text-xs text-slate-500">/ {visibleParticipants} ({visibleParticipants > 0 ? Math.round((completedCount / visibleParticipants) * 100) : 0}%)</div>
               </div>
             </div>
           </div>

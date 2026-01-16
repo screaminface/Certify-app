@@ -2,9 +2,9 @@ import Dexie, { Table } from 'dexie';
 
 export interface Group {
   id: string;
-  groupNumber: number;
-  courseStartDate: string; // ISO date string
-  courseEndDate: string; // ISO date string
+  groupNumber: number | null; // null for planned groups, assigned only when activated
+  courseStartDate: string; // ISO date string (Monday)
+  courseEndDate: string; // ISO date string (next Monday, +7 days)
   status: 'active' | 'planned' | 'completed';
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
@@ -21,11 +21,8 @@ export interface Participant {
   birthPlace: string; // Birth place (city/village)
   citizenship: string; // Default: "българско"
   medicalDate: string; // ISO date string
-  courseStartDate: string; // ISO date string
-  courseEndDate: string; // ISO date string
-  groupNumber: number; // Effective group (manualGroup ?? autoGroup)
-  autoGroup: number; // Automatically calculated group based on courseStart
-  manualGroup: number | null; // Manual override, null if not overridden
+  courseStartDate: string; // ISO date string (Monday) - identifies which period/group
+  courseEndDate: string; // ISO date string (next Monday, +7 days)
   uniqueNumber: string; // format "NNNN-NNN"
   sent: boolean;
   documents: boolean;
@@ -139,6 +136,29 @@ export class AppDatabase extends Dexie {
         participant.egn = participant.egn || '';
         participant.birthPlace = participant.birthPlace || '';
         participant.citizenship = participant.citizenship || 'българско';
+      });
+    });
+
+    // Version 7: Major refactoring - remove groupNumber from participants, make it nullable for planned groups
+    this.version(7).stores({
+      groups: 'id, courseStartDate, status, groupNumber',
+      participants: 'id, courseStartDate, uniqueNumber, companyName, personName, egn',
+      settings: 'id',
+      yearlyArchives: 'id, year'
+    }).upgrade(async tx => {
+      // Remove groupNumber, autoGroup, manualGroup from participants
+      // Participants are now identified only by courseStartDate
+      await tx.table('participants').toCollection().modify(participant => {
+        delete participant.groupNumber;
+        delete participant.autoGroup;
+        delete participant.manualGroup;
+      });
+      
+      // For planned groups, set groupNumber to null
+      await tx.table('groups').toCollection().modify(group => {
+        if (group.status === 'planned') {
+          group.groupNumber = null;
+        }
       });
     });
   }
