@@ -144,60 +144,60 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       }
 
       if (mode === 'replace') {
-        await db.participants.clear();
-        await db.groups.clear();
-        
-        for (const group of backup.groups) {
-          await db.groups.add(group);
-        }
-        for (const participant of backup.participants) {
-          await db.participants.add(participant);
-        }
-        if (backup.settings) {
-          await db.settings.update(1, backup.settings);
-        }
+        await db.transaction('rw', [db.participants, db.groups, db.settings], async () => {
+          await db.participants.clear();
+          await db.groups.clear();
+          
+          if (backup.groups.length > 0) {
+            await db.groups.bulkAdd(backup.groups);
+          }
+          if (backup.participants.length > 0) {
+            await db.participants.bulkAdd(backup.participants);
+          }
+          if (backup.settings) {
+            await db.settings.update(1, backup.settings);
+          }
+        });
       } else {
         // Merge
-        // Import groups first
-        for (const group of backup.groups) {
-          const existing = await db.groups.get(group.id);
-          if (existing) {
-            await db.groups.update(group.id, group);
-          } else {
-            await db.groups.add(group);
+        await db.transaction('rw', [db.participants, db.groups, db.settings], async () => {
+          // Import groups first (bulkPut handles existing/new)
+          if (backup.groups.length > 0) {
+            await db.groups.bulkPut(backup.groups);
           }
-        }
 
-        // Import participants with collision resolution
-        for (const participant of backup.participants) {
-          const existing = await db.participants.get(participant.id);
-          
-          if (existing) {
-            await db.participants.update(participant.id, participant);
-          } else {
-            let uniqueNumber = participant.uniqueNumber;
-            let attempts = 0;
+          // Import participants with collision resolution
+          for (const participant of backup.participants) {
+            const existing = await db.participants.get(participant.id);
             
-            while (!(await isUniqueNumberAvailable(uniqueNumber)) && attempts < 1000) {
-              const currentSettings = await db.settings.get(1);
-              if (currentSettings) {
-                const newPrefix = currentSettings.lastUniquePrefix + 1;
-                const newSeq = currentSettings.lastUniqueSeq + 1;
-                uniqueNumber = `${newPrefix.toString().padStart(4, '0')}-${newSeq.toString().padStart(3, '0')}`;
-                await db.settings.update(1, {
-                  lastUniquePrefix: newPrefix,
-                  lastUniqueSeq: newSeq
-                });
+            if (existing) {
+              await db.participants.update(participant.id, participant);
+            } else {
+              let uniqueNumber = participant.uniqueNumber;
+              let attempts = 0;
+              
+              // We check availability against the CURRENT transaction state
+              while (!(await isUniqueNumberAvailable(uniqueNumber)) && attempts < 1000) {
+                const currentSettings = await db.settings.get(1);
+                if (currentSettings) {
+                  const newPrefix = currentSettings.lastUniquePrefix + 1;
+                  const newSeq = currentSettings.lastUniqueSeq + 1;
+                  uniqueNumber = `${newPrefix.toString().padStart(4, '0')}-${newSeq.toString().padStart(3, '0')}`;
+                  await db.settings.update(1, {
+                    lastUniquePrefix: newPrefix,
+                    lastUniqueSeq: newSeq
+                  });
+                }
+                attempts++;
               }
-              attempts++;
-            }
 
-            await db.participants.add({
-              ...participant,
-              uniqueNumber
-            });
+              await db.participants.add({
+                ...participant,
+                uniqueNumber
+              });
+            }
           }
-        }
+        });
       }
       showAlert(t('common.success'), `Import successful! Imported ${backup.participants.length} participants and ${backup.groups.length} groups.`, 'success');
     } catch (error) {

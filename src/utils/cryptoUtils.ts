@@ -52,19 +52,22 @@ function ab2str(buf: ArrayBuffer): string {
 }
 
 /**
- * Converts an ArrayBuffer to Base64 string
+ * Converts an ArrayBuffer to Base64 string efficiently
  */
 function bufferToBase64(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const len = bytes.byteLength;
+  const chunk_size = 8192;
+  
+  for (let i = 0; i < len; i += chunk_size) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk_size) as any);
   }
   return window.btoa(binary);
 }
 
 /**
- * Converts Base64 string to Uint8Array
+ * Converts Base64 string to Uint8Array efficiently
  */
 function base64ToBuffer(base64: string): Uint8Array {
   const binary_string = window.atob(base64);

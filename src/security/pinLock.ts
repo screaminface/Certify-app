@@ -30,8 +30,11 @@ export interface PinConfig {
 function bufferToBase64(buf: ArrayBufferLike): string {
   const bytes = new Uint8Array(buf);
   let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const len = bytes.byteLength;
+  const chunk_size = 8192;
+  
+  for (let i = 0; i < len; i += chunk_size) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk_size) as any);
   }
   return window.btoa(binary);
 }
