@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Participant, db } from "../db/database";
+import { Participant, db, Group } from "../db/database";
 import { useParticipants } from "../hooks/useParticipants";
 import { useLanguage } from "../contexts/LanguageContext";
 import { KebabMenu } from "./ui/KebabMenu";
@@ -69,9 +69,11 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
     participants.forEach((p) => {
       const group = groupMap.get(p.courseStartDate);
+      
       if (!group) {
-        // If no group exists for this courseStartDate, treat as active
-        active.push(p);
+        // If no group exists for this courseStartDate (orphan), treat as planned
+        // This prevents them from appearing in Active group incorrectly
+        planned.push(p);
         return;
       }
 
@@ -88,21 +90,49 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
   }, [participants, groupMap]);
 
   // Group planned participants by courseStartDate for visual separation
-  // Show only next 2 planned periods (sorted by date)
+  // Show next 2 planned periods (from DB groups + any orphans)
   const plannedGroupedByDate = useMemo(() => {
     const grouped = new Map<
       string,
       { group: any; participants: Participant[] }
     >();
 
-    participantsByStatus.planned.forEach((p) => {
-      const group = groupMap.get(p.courseStartDate);
-      if (!group) return;
+    // 1. Initialize with specific PLANNED groups from DB (to ensure empty ones show up)
+    if (groups) {
+      groups.forEach(g => {
+        if (g.status === 'planned') {
+          grouped.set(g.courseStartDate, { group: g, participants: [] });
+        }
+      });
+    }
 
-      if (!grouped.has(p.courseStartDate)) {
-        grouped.set(p.courseStartDate, { group, participants: [] });
+    // 2. Distribute participants into groups (including orphans)
+    participantsByStatus.planned.forEach((p) => {
+      let group = groupMap.get(p.courseStartDate);
+      
+      // Handle orphan participants (virtual group)
+      if (!group) {
+         // Check if we already created a virtual group in step 1? No, step 1 is DB groups only.
+         // If groupMap didn't have it, it's not in DB.
+         if (!grouped.has(p.courseStartDate)) {
+             const virtualGroup = {
+                id: 'virtual-' + p.courseStartDate,
+                groupNumber: null,
+                courseStartDate: p.courseStartDate,
+                courseEndDate: p.courseEndDate,
+                status: 'planned',
+                isLocked: false,
+                createdAt: '',
+                updatedAt: ''
+             };
+             grouped.set(p.courseStartDate, { group: virtualGroup, participants: [] });
+         }
       }
-      grouped.get(p.courseStartDate)!.participants.push(p);
+
+      // Add participant to the correct group bucket
+      if (grouped.has(p.courseStartDate)) {
+        grouped.get(p.courseStartDate)!.participants.push(p);
+      }
     });
 
     // Sort by courseStartDate ascending (earliest first) and take only first 2
@@ -113,7 +143,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         courseStartDate,
         ...data,
       }));
-  }, [participantsByStatus.planned, groupMap]);
+  }, [participantsByStatus.planned, groupMap, groups]);
 
   // Group completed participants by courseStartDate for accordion display
   const completedGroupedByDate = useMemo(() => {
@@ -140,6 +170,11 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         ...data,
       }));
   }, [participantsByStatus.completed, groupMap]);
+
+  // Find active group for display metadata
+  const activeGroup = useMemo(() => groups?.find(g => g.status === 'active'), [groups]);
+  const activeGroupNumber = activeGroup?.groupNumber ? [activeGroup.groupNumber] : [];
+  const activeDateRange = activeGroup ? `${formatDateBG(activeGroup.courseStartDate)} - ${formatDateBG(activeGroup.courseEndDate)}` : undefined;
 
   // Get unique periods for each status
   const groupStats = useMemo(() => {
@@ -295,11 +330,22 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
   const handleGenerateCertificate = async (participant: Participant) => {
     try {
-      const group = groupMap.get(participant.courseStartDate);
+      let group = groupMap.get(participant.courseStartDate);
+      
       if (!group) {
-        alert('Грешка: Групата не е намерена');
-        return;
+        // Fallback: Create virtual group for orphans to allow generation
+        group = {
+            id: 'virtual',
+            groupNumber: null,
+            courseStartDate: participant.courseStartDate,
+            courseEndDate: participant.courseEndDate,
+            status: 'planned',
+            isLocked: false,
+            createdAt: '',
+            updatedAt: ''
+         } as unknown as Group;
       }
+      
       await generateCertificate(participant, group);
       alert('Сертификатът е генериран успешно!');
     } catch (error) {
@@ -595,7 +641,8 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         <GroupSection
           title={t("groups.activeSection")}
           count={groupStats.active.count}
-          groupNumbers={[]}
+          groupNumbers={activeGroupNumber}
+          dateRange={activeDateRange}
           isCollapsed={collapsedSections.active}
           onToggle={() => toggleSection("active")}
           variant="active"
