@@ -45,6 +45,7 @@ export default {
   'participant.courseStart': 'Course Start',
   'participant.courseEnd': 'Course End',
   'participant.group': 'Group',
+  'participant.period': 'Period',
   'participant.uniqueNumber': 'Unique Number',
   'participant.sent': 'Sent',
   'participant.documents': 'Documents',

@@ -45,6 +45,7 @@ export default {
   'participant.courseStart': 'Начало на курс',
   'participant.courseEnd': 'Край на курс',
   'participant.group': 'Група',
+  'participant.period': 'Период',
   'participant.uniqueNumber': '№',
   'participant.sent': 'Изпратен',
   'participant.documents': 'Документи',
