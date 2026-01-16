@@ -11,14 +11,14 @@ export async function getActiveGroup(): Promise<Group | undefined> {
 }
 
 /**
- * Generate unique numbers for all participants in a group
+ * Generate unique numbers for all participants in a period/group
  * Used when planned group becomes active
  */
-export async function generateUniqueNumbersForGroup(groupNumber: number): Promise<void> {
-  // Get all participants in this group that need unique numbers
+export async function generateUniqueNumbersForGroup(courseStartDate: string): Promise<void> {
+  // Get all participants in this period that need unique numbers
   const participants = await db.participants
-    .where('groupNumber')
-    .equals(groupNumber)
+    .where('courseStartDate')
+    .equals(courseStartDate)
     .toArray();
   
   const participantsNeedingNumbers = participants.filter(p => !p.uniqueNumber);
@@ -156,12 +156,21 @@ export async function getSuggestedGroup(courseStartDate: string): Promise<{ grou
 
 /**
  * Create a new group (planned by default)
+ * Planned groups do NOT get groupNumber - it's assigned when activated
  */
 export async function createGroup(courseStartDate: string, status: 'active' | 'planned' = 'planned'): Promise<Group> {
-  // Get max group number
-  const allGroups = await db.groups.toArray();
-  const maxGroupNumber = allGroups.length > 0 ? Math.max(...allGroups.map(g => g.groupNumber)) : 0;
-  const newGroupNumber = maxGroupNumber + 1;
+  let groupNumber: number | null = null;
+  
+  // Only assign groupNumber for active groups
+  // Planned groups get null (assigned when activated)
+  if (status === 'active') {
+    const allGroups = await db.groups.toArray();
+    const existingNumbers = allGroups
+      .map(g => g.groupNumber)
+      .filter((n): n is number => n !== null);
+    const maxGroupNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+    groupNumber = maxGroupNumber + 1;
+  }
   
   const courseEndDate = new Date(courseStartDate);
   courseEndDate.setDate(courseEndDate.getDate() + 7);
@@ -170,7 +179,7 @@ export async function createGroup(courseStartDate: string, status: 'active' | 'p
   
   const newGroup: Group = {
     id: uuidv4(),
-    groupNumber: newGroupNumber,
+    groupNumber, // null for planned, number for active
     courseStartDate,
     courseEndDate: courseEndDate.toISOString().split('T')[0],
     status,
@@ -242,9 +251,12 @@ export async function activateGroup(groupId: string): Promise<void> {
  * Delete a group if it has no participants
  */
 export async function deleteGroupIfEmpty(groupId: string): Promise<boolean> {
+  const group = await db.groups.get(groupId);
+  if (!group) return false;
+  
   const participantCount = await db.participants
-    .where('groupNumber')
-    .equals((await db.groups.get(groupId))!.groupNumber)
+    .where('courseStartDate')
+    .equals(group.courseStartDate)
     .count();
     
   if (participantCount === 0) {
@@ -256,45 +268,15 @@ export async function deleteGroupIfEmpty(groupId: string): Promise<boolean> {
 }
 
 /**
+ * @deprecated NO LONGER NEEDED - Participants no longer have autoGroup/groupNumber
+ * Participants are now identified by courseStartDate only
+ * 
  * Recalculate all auto groups and sync with current workflow
  * This maintains sequential group numbers
  */
 export async function recalculateAllAutoGroups(): Promise<number> {
-  const allParticipants = await db.participants.toArray();
-  
-  if (allParticipants.length === 0) {
-    return 0;
-  }
-  
-  // Collect unique courseStart dates from existing participants
-  const uniqueDates = new Set<string>();
-  allParticipants.forEach(p => uniqueDates.add(p.courseStartDate));
-  
-  // Sort dates ascending
-  const sortedDates = Array.from(uniqueDates).sort();
-  
-  // Create a map from courseStartDate to auto group number
-  const dateToAutoGroup = new Map<string, number>();
-  sortedDates.forEach((date, index) => {
-    dateToAutoGroup.set(date, index + 1);
-  });
-  
-  // Update all participants' autoGroup
-  let updatedCount = 0;
-  for (const participant of allParticipants) {
-    const newAutoGroup = dateToAutoGroup.get(participant.courseStartDate)!;
-    const newGroupNumber = participant.manualGroup ?? newAutoGroup;
-    
-    if (participant.autoGroup !== newAutoGroup || participant.groupNumber !== newGroupNumber) {
-      await db.participants.update(participant.id, {
-        autoGroup: newAutoGroup,
-        groupNumber: newGroupNumber
-      });
-      updatedCount++;
-    }
-  }
-  
-  return updatedCount;
+  // This function is no longer needed but kept for backward compatibility
+  return 0;
 }
 
 /**
@@ -494,6 +476,7 @@ export async function makeGroupActive(groupId: string): Promise<{ success: boole
 /**
  * Activate group directly (after confirmation or if no conflict)
  * If currentActiveId provided, move it to planned first
+ * IMPORTANT: Assigns groupNumber when activating planned group
  */
 export async function activateGroupDirectly(groupId: string, moveCurrentToPlanned: boolean = false): Promise<{ success: boolean }> {
   const group = await db.groups.get(groupId);
@@ -510,21 +493,35 @@ export async function activateGroupDirectly(groupId: string, moveCurrentToPlanne
       await db.groups.update(currentActive.id, {
         status: 'planned',
         updatedAt: now,
-        activatedAt: undefined
+        activatedAt: undefined,
+        groupNumber: null // Remove groupNumber when moving back to planned
       });
     }
   }
   
+  // Assign groupNumber if this is a planned group being activated
+  let groupNumber = group.groupNumber;
+  if (group.status === 'planned' && groupNumber === null) {
+    // Get next available groupNumber
+    const allGroups = await db.groups.toArray();
+    const existingNumbers = allGroups
+      .map(g => g.groupNumber)
+      .filter((n): n is number => n !== null);
+    const maxGroupNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+    groupNumber = maxGroupNumber + 1;
+  }
+  
   // Activate the selected group
   await db.groups.update(groupId, {
+    groupNumber, // Assign number if it was null
     status: 'active',
     activatedAt: now,
     updatedAt: now,
     isLocked: false // Unlock if it was locked (for reopening archived)
   });
   
-  // Generate unique numbers if this group doesn't have them yet
-  await generateUniqueNumbersForGroup(group.groupNumber);
+  // Generate unique numbers for participants in this period
+  await generateUniqueNumbersForGroup(group.courseStartDate);
   
   return { success: true };
 }
