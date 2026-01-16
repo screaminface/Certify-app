@@ -26,10 +26,10 @@ export function useBulkActions() {
         }
 
         // Check if group is locked
-        const group = await db.groups.where('groupNumber').equals(participant.groupNumber).first();
+        const group = await db.groups.where('courseStartDate').equals(participant.courseStartDate).first();
         if (group && group.status === 'completed' && group.isLocked) {
           result.failed++;
-          result.errors.push(`Participant ${participant.personName} belongs to locked group ${group.groupNumber}`);
+          result.errors.push(`Participant ${participant.personName} belongs to locked group (${group.courseStartDate})`);
           continue;
         }
 
@@ -85,10 +85,10 @@ export function useBulkActions() {
         }
 
         // Check if group is locked
-        const group = await db.groups.where('groupNumber').equals(participant.groupNumber).first();
+        const group = await db.groups.where('courseStartDate').equals(participant.courseStartDate).first();
         if (group && group.status === 'completed' && group.isLocked) {
           result.failed++;
-          result.errors.push(`Participant ${participant.personName} belongs to locked group ${group.groupNumber}`);
+          result.errors.push(`Participant ${participant.personName} belongs to locked group (${group.courseStartDate})`);
           continue;
         }
 
