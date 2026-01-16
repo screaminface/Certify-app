@@ -88,6 +88,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
   }, [participants, groupMap]);
 
   // Group planned participants by courseStartDate for visual separation
+  // Show only next 2 planned periods (sorted by date)
   const plannedGroupedByDate = useMemo(() => {
     const grouped = new Map<
       string,
@@ -104,9 +105,10 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
       grouped.get(p.courseStartDate)!.participants.push(p);
     });
 
-    // Sort by courseStartDate ascending (earliest first)
+    // Sort by courseStartDate ascending (earliest first) and take only first 2
     return Array.from(grouped.entries())
       .sort(([a], [b]) => a.localeCompare(b))
+      .slice(0, 2) // Show only next 2 planned periods
       .map(([courseStartDate, data]) => ({
         courseStartDate,
         ...data,
@@ -589,34 +591,38 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
       {/* Group Sections */}
       <div className="space-y-4 pb-32">
-        {/* Active Groups Section */}
-        {participantsByStatus.active.length > 0 && (
-          <GroupSection
-            title={t("groups.activeSection")}
-            count={groupStats.active.count}
-            groupNumbers={[]}
-            isCollapsed={collapsedSections.active}
-            onToggle={() => toggleSection("active")}
-            variant="active"
-          >
+        {/* Active Groups Section - ALWAYS VISIBLE */}
+        <GroupSection
+          title={t("groups.activeSection")}
+          count={groupStats.active.count}
+          groupNumbers={[]}
+          isCollapsed={collapsedSections.active}
+          onToggle={() => toggleSection("active")}
+          variant="active"
+        >
+          {participantsByStatus.active.length > 0 ? (
             <div className="space-y-4">
               {participantsByStatus.active.map((p, i) =>
                 renderParticipantCard(p, i)
               )}
             </div>
-          </GroupSection>
-        )}
+          ) : (
+            <div className="text-center py-8 text-slate-500">
+              Няма участници в активна група
+            </div>
+          )}
+        </GroupSection>
 
-        {/* Planned Groups Section */}
-        {participantsByStatus.planned.length > 0 && (
-          <GroupSection
-            title={t("groups.plannedSection")}
-            count={groupStats.planned.count}
-            groupNumbers={[]}
-            isCollapsed={collapsedSections.planned}
-            onToggle={() => toggleSection("planned")}
-            variant="planned"
-          >
+        {/* Planned Groups Section - ALWAYS VISIBLE */}
+        <GroupSection
+          title={t("groups.plannedSection")}
+          count={groupStats.planned.count}
+          groupNumbers={[]}
+          isCollapsed={collapsedSections.planned}
+          onToggle={() => toggleSection("planned")}
+          variant="planned"
+        >
+          {plannedGroupedByDate.length > 0 ? (
             <div className="space-y-3">
               {plannedGroupedByDate.map(
                 ({ courseStartDate, group, participants }) => (
@@ -649,18 +655,22 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                 )
               )}
             </div>
-          </GroupSection>
-        )}
+          ) : (
+            <div className="text-center py-8 text-slate-500">
+              Няма планирани групи
+            </div>
+          )}
+        </GroupSection>
 
-        {/* Completed Groups Section (Archive) */}
-        {participantsByStatus.completed.length > 0 && (
-          <GroupSection
-            title={t("groups.completedSection")}
-            count={groupStats.completed.count}
-            isCollapsed={collapsedSections.completed}
-            onToggle={() => toggleSection("completed")}
-            variant="completed"
-          >
+        {/* Completed Groups Section (Archive) - ALWAYS VISIBLE */}
+        <GroupSection
+          title={t("groups.completedSection")}
+          count={groupStats.completed.count}
+          isCollapsed={collapsedSections.completed}
+          onToggle={() => toggleSection("completed")}
+          variant="completed"
+        >
+          {completedGroupedByDate.length > 0 ? (
             <div className="space-y-2">
               {completedGroupedByDate.map(
                 ({ courseStartDate, group, participants }) => (
@@ -676,8 +686,12 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                 )
               )}
             </div>
-          </GroupSection>
-        )}
+          ) : (
+            <div className="text-center py-8 text-slate-500">
+              Няма приключени групи
+            </div>
+          )}
+        </GroupSection>
       </div>
 
       {/* Delete Confirmation Modal */}
