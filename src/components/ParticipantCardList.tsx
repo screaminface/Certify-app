@@ -57,7 +57,8 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
   const groups = useLiveQuery(() => db.groups.toArray(), []);
   const groupMap = useMemo(() => {
     if (!groups) return new Map();
-    return new Map(groups.map((g) => [g.groupNumber, g]));
+    // Map by courseStartDate instead of groupNumber
+    return new Map(groups.map((g) => [g.courseStartDate, g]));
   }, [groups]);
 
   // Group participants by group status
@@ -67,8 +68,9 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     const completed: Participant[] = [];
 
     participants.forEach((p) => {
-      const group = groupMap.get(p.groupNumber);
+      const group = groupMap.get(p.courseStartDate);
       if (!group) {
+        // If no group exists for this courseStartDate, treat as active
         active.push(p);
         return;
       }
@@ -85,84 +87,84 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     return { active, planned, completed };
   }, [participants, groupMap]);
 
-  // Group planned participants by group number for visual separation
-  const plannedGroupedByNumber = useMemo(() => {
+  // Group planned participants by courseStartDate for visual separation
+  const plannedGroupedByDate = useMemo(() => {
     const grouped = new Map<
-      number,
+      string,
       { group: any; participants: Participant[] }
     >();
 
     participantsByStatus.planned.forEach((p) => {
-      const group = groupMap.get(p.groupNumber);
+      const group = groupMap.get(p.courseStartDate);
       if (!group) return;
 
-      if (!grouped.has(p.groupNumber)) {
-        grouped.set(p.groupNumber, { group, participants: [] });
+      if (!grouped.has(p.courseStartDate)) {
+        grouped.set(p.courseStartDate, { group, participants: [] });
       }
-      grouped.get(p.groupNumber)!.participants.push(p);
+      grouped.get(p.courseStartDate)!.participants.push(p);
     });
 
-    // Sort by group number ascending (earliest first)
+    // Sort by courseStartDate ascending (earliest first)
     return Array.from(grouped.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([groupNumber, data]) => ({
-        groupNumber,
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([courseStartDate, data]) => ({
+        courseStartDate,
         ...data,
       }));
   }, [participantsByStatus.planned, groupMap]);
 
-  // Group completed participants by group for accordion display
-  const completedGroupedByNumber = useMemo(() => {
+  // Group completed participants by courseStartDate for accordion display
+  const completedGroupedByDate = useMemo(() => {
     const grouped = new Map<
-      number,
+      string,
       { group: any; participants: Participant[] }
     >();
 
     participantsByStatus.completed.forEach((p) => {
-      const group = groupMap.get(p.groupNumber);
+      const group = groupMap.get(p.courseStartDate);
       if (!group) return;
 
-      if (!grouped.has(p.groupNumber)) {
-        grouped.set(p.groupNumber, { group, participants: [] });
+      if (!grouped.has(p.courseStartDate)) {
+        grouped.set(p.courseStartDate, { group, participants: [] });
       }
-      grouped.get(p.groupNumber)!.participants.push(p);
+      grouped.get(p.courseStartDate)!.participants.push(p);
     });
 
-    // Sort by group number descending (newest first)
+    // Sort by courseStartDate descending (newest first)
     return Array.from(grouped.entries())
-      .sort(([a], [b]) => b - a)
-      .map(([groupNumber, data]) => ({
-        groupNumber,
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([courseStartDate, data]) => ({
+        courseStartDate,
         ...data,
       }));
   }, [participantsByStatus.completed, groupMap]);
 
-  // Get unique group numbers for each status
+  // Get unique periods for each status
   const groupStats = useMemo(() => {
-    const activeGroups = new Set<number>();
-    const plannedGroups = new Set<number>();
-    const completedGroups = new Set<number>();
+    const activePeriods = new Set<string>();
+    const plannedPeriods = new Set<string>();
+    const completedPeriods = new Set<string>();
 
-    participantsByStatus.active.forEach((p) => activeGroups.add(p.groupNumber));
+    participantsByStatus.active.forEach((p) => activePeriods.add(p.courseStartDate));
     participantsByStatus.planned.forEach((p) =>
-      plannedGroups.add(p.groupNumber)
+      plannedPeriods.add(p.courseStartDate)
     );
     participantsByStatus.completed.forEach((p) =>
-      completedGroups.add(p.groupNumber)
+      completedPeriods.add(p.courseStartDate)
     );
 
     return {
       active: {
-        count: activeGroups.size,
-        numbers: Array.from(activeGroups).sort((a, b) => a - b),
+        count: activePeriods.size,
+        periods: Array.from(activePeriods).sort(),
       },
       planned: {
-        count: plannedGroups.size,
-        numbers: Array.from(plannedGroups).sort((a, b) => a - b),
+        count: plannedPeriods.size,
+        periods: Array.from(plannedPeriods).sort(),
       },
       completed: {
-        count: completedGroups.size,
-        numbers: Array.from(completedGroups).sort((a, b) => a - b),
+        count: completedPeriods.size,
+        periods: Array.from(completedPeriods).sort(),
       },
     };
   }, [participantsByStatus]);
@@ -206,7 +208,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     field: "sent" | "documents" | "handedOver" | "paid"
   ) => {
     // Check if group is locked
-    const group = groupMap.get(participant.groupNumber);
+    const group = groupMap.get(participant.courseStartDate);
     if (group && group.status === "completed" && group.isLocked) {
       alert(t("lock.lockedInfo"));
       return;
@@ -232,7 +234,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
   };
 
   const isGroupLocked = (participant: Participant): boolean => {
-    const group = groupMap.get(participant.groupNumber);
+    const group = groupMap.get(participant.courseStartDate);
     return group ? group.status === "completed" && group.isLocked : false;
   };
 
@@ -291,7 +293,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
   const handleGenerateCertificate = async (participant: Participant) => {
     try {
-      const group = groupMap.get(participant.groupNumber);
+      const group = groupMap.get(participant.courseStartDate);
       if (!group) {
         alert('Грешка: Групата не е намерена');
         return;
@@ -405,9 +407,9 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             </span>
           </div>
           <div>
-            <span className="text-slate-500">{t("participant.group")}:</span>
+            <span className="text-slate-500">{t("participant.period")}:</span>
             <span className="ml-1 font-medium text-slate-900">
-              {participant.groupNumber}
+              {formatDateBG(participant.courseStartDate)}
             </span>
           </div>
           <div>
@@ -592,7 +594,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
           <GroupSection
             title={t("groups.activeSection")}
             count={groupStats.active.count}
-            groupNumbers={groupStats.active.numbers}
+            groupNumbers={[]}
             isCollapsed={collapsedSections.active}
             onToggle={() => toggleSection("active")}
             variant="active"
@@ -610,23 +612,23 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
           <GroupSection
             title={t("groups.plannedSection")}
             count={groupStats.planned.count}
-            groupNumbers={groupStats.planned.numbers}
+            groupNumbers={[]}
             isCollapsed={collapsedSections.planned}
             onToggle={() => toggleSection("planned")}
             variant="planned"
           >
             <div className="space-y-3">
-              {plannedGroupedByNumber.map(
-                ({ groupNumber, group, participants }) => (
+              {plannedGroupedByDate.map(
+                ({ courseStartDate, group, participants }) => (
                   <div
-                    key={groupNumber}
+                    key={courseStartDate}
                     className="bg-white border-2 border-amber-200 rounded-lg overflow-hidden"
                   >
                     {/* Group Header */}
                     <div className="bg-amber-50 px-3 py-2 border-b border-amber-200">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-amber-900">
-                          Група {groupNumber}
+                          {group.groupNumber ? `Група ${group.groupNumber}` : 'Планиран период'}
                         </span>
                         <span className="text-xs text-amber-700 font-medium">
                           {participants.length}{" "}
@@ -641,7 +643,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
                     {/* Group Cards */}
                     <div className="p-2 space-y-2">
-                      {participants.map((p, i) => renderParticipantCard(p, i))}
+                      {participants.map((p: Participant, i: number) => renderParticipantCard(p, i))}
                     </div>
                   </div>
                 )
@@ -660,11 +662,11 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             variant="completed"
           >
             <div className="space-y-2">
-              {completedGroupedByNumber.map(
-                ({ groupNumber, group, participants }) => (
+              {completedGroupedByDate.map(
+                ({ courseStartDate, group, participants }) => (
                   <ArchivedGroupAccordion
-                    key={groupNumber}
-                    groupNumber={groupNumber}
+                    key={courseStartDate}
+                    groupNumber={group.groupNumber || 0}
                     courseStartDate={group.courseStartDate}
                     courseEndDate={group.courseEndDate}
                     participants={participants}
