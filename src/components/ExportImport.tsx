@@ -160,7 +160,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ filteredParticipants
         'Medical Date': p.medicalDate,
         'Course Start Date': p.courseStartDate,
         'Course End Date': p.courseEndDate,
-        'Group Number': p.groupNumber,
+
         'Unique Number': p.uniqueNumber,
         'Sent': p.sent ? 'Yes' : 'No',
         'Documents': p.documents ? 'Yes' : 'No',
@@ -189,7 +189,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ filteredParticipants
         'Medical Date',
         'Course Start Date',
         'Course End Date',
-        'Group Number',
+
         'Unique Number',
         'Sent',
         'Documents',
@@ -204,7 +204,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ filteredParticipants
         p.medicalDate,
         p.courseStartDate,
         p.courseEndDate,
-        p.groupNumber,
+
         p.uniqueNumber,
         p.sent ? 'Yes' : 'No',
         p.documents ? 'Yes' : 'No',

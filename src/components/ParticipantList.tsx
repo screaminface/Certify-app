@@ -35,8 +35,6 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   onDelete,
   collapsedSections,
   toggleSection,
-  expandSection,
-  hasActiveFilters,
   groupRefreshKey = 0
 }) => {
   const { updateParticipant } = useParticipants();
@@ -280,15 +278,6 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     };
     syncAllGroups();
   }, []);
-
-  // Only show visible (non-collapsed) participants for bulk actions
-  const visibleParticipants = useMemo(() => {
-    const visible: Participant[] = [];
-    if (!collapsedSections.active) visible.push(...participantsByStatus.active);
-    if (!collapsedSections.planned) visible.push(...participantsByStatus.planned);
-    if (!collapsedSections.completed) visible.push(...participantsByStatus.completed);
-    return visible;
-  }, [participantsByStatus, collapsedSections]);
 
   const handleSort = (field: 'courseStartDate' | 'groupNumber' | 'uniqueNumber') => {
     if (sortBy === field) {
@@ -757,17 +746,6 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   };
 
   //Selection handlers
-  const handleSelectAll = () => {
-    // Only include participants from visible (expanded) sections and unlocked groups
-    const selectableParticipants = visibleParticipants.filter(p => !isParticipantReadOnly(p));
-    
-    if (selectedIds.size === selectableParticipants.length && selectableParticipants.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(selectableParticipants.map(p => p.id)));
-    }
-  };
-
   const handleSelectOne = (id: string) => {
     const newSelection = new Set(selectedIds);
     if (newSelection.has(id)) {
@@ -835,7 +813,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
              </div>
           ) : (
             <div className="space-y-8">
-              {activeGroupedByDate.map((data, idx) => (
+              {activeGroupedByDate.map((data) => (
                 <div key={data.group.courseStartDate} className="space-y-3">
                   {/* Sub-header for multiple active groups */}
                   {activeGroupedByDate.length > 1 && (
@@ -1042,8 +1020,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                     groupNumber={group.groupNumber || 0}
                     courseStartDate={group.courseStartDate}
                     courseEndDate={group.courseEndDate}
-                    participants={participants}
-                    renderParticipantRow={renderArchivedParticipantRow}
+                    participants={participants}                  renderParticipantRow={renderArchivedParticipantRow}
                   />
                 </div>
               ))}

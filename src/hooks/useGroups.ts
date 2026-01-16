@@ -17,10 +17,12 @@ export function useGroups() {
     const allGroups = await db.groups.orderBy('groupNumber').toArray();
     const groupsWithCounts = await Promise.all(
       allGroups.map(async (group) => {
-        const count = await db.participants
-          .where('groupNumber')
-          .equals(group.groupNumber)
-          .count();
+        const count = group.groupNumber !== null 
+          ? await db.participants
+              .where('groupNumber')
+              .equals(group.groupNumber)
+              .count()
+          : 0;
         return { ...group, participantCount: count };
       })
     );

@@ -221,10 +221,20 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     const plannedPeriods = new Set<string>();
     const completedPeriods = new Set<string>();
 
+    // Active
     participantsByStatus.active.forEach((p) => activePeriods.add(p.courseStartDate));
+    
+    // Planned - include groups from DB and groups with participants
+    if (groups) {
+      groups.forEach(g => {
+        if (g.status === 'planned') plannedPeriods.add(g.courseStartDate);
+      });
+    }
     participantsByStatus.planned.forEach((p) =>
       plannedPeriods.add(p.courseStartDate)
     );
+
+    // Completed
     participantsByStatus.completed.forEach((p) =>
       completedPeriods.add(p.courseStartDate)
     );
@@ -235,7 +245,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         periods: Array.from(activePeriods).sort(),
       },
       planned: {
-        count: plannedPeriods.size,
+        count: Math.min(plannedPeriods.size, 2), // Cap at 2 to match the UI slice
         periods: Array.from(plannedPeriods).sort(),
       },
       completed: {
@@ -243,7 +253,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         periods: Array.from(completedPeriods).sort(),
       },
     };
-  }, [participantsByStatus]);
+  }, [participantsByStatus, groups]);
 
   // Auto-expand sections when search/filter results are present
   const prevParticipantsRef = useRef(participants);

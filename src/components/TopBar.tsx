@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Users, Settings, Lock } from 'lucide-react';
 import { isPinSet } from '../security/pinLock';

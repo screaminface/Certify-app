@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, ShieldCheck, Lock, Unlock, Delete, AlertTriangle, RefreshCcw } from 'lucide-react';
+import { ShieldCheck, Lock, Delete } from 'lucide-react';
 import { hashPin, verifyPin, getPinConfig, savePinConfig, clearPinConfig } from '../../security/pinLock';
 import { ConfirmModal } from '../ui/ConfirmModal';
 
