@@ -50,8 +50,9 @@ export async function generateCertificate(
 
     // Calculate protocol number: groupNumber * 5
     // Group 1 => F08 = 5, Group 2 => F08 = 10, Group 3 => F08 = 15, etc.
-    const protocolNumber = group.groupNumber * 5;
-    console.log(`📋 Group ${group.groupNumber} => F08 = ${protocolNumber}`);
+    // If group has no number yet (planned), use 0
+    const protocolNumber = (group.groupNumber || 0) * 5;
+    console.log(`📋 Group ${group.groupNumber || 'planned'} => F08 = ${protocolNumber}`);
 
     // Fetch the template from public folder
     console.log('📄 Fetching template from /Certify-app/template.docx...');
