@@ -2,6 +2,7 @@ export default {
   // Navigation
   'nav.participants': 'Участници',
   'nav.tools': 'Инструменти',
+  'nav.lock': 'Заключи',
   
   // Common
   'common.add': 'Добави',
@@ -57,6 +58,12 @@ export default {
   'participant.notCompleted': 'Незавършен',
   'participant.manual': 'Ръчно',
   'participant.actions': 'Действия',
+  'participants.noParticipantsInGroup': 'Няма участници в тази група',
+  'participants.noActive': 'Няма активна група',
+  'participant.added': 'Добавен',
+  'participant.modified': 'Последна промяна',
+  'participant.egn': 'ЕГН',
+  'participant.birthPlace': 'Местораждане',
   
   // Participant Modal
   'modal.addParticipant': 'Добави участник',
@@ -68,6 +75,9 @@ export default {
   'modal.personNameRequired': 'Името на лицето е задължително',
   'modal.medicalDate': 'Медицински преглед',
   'modal.medicalDateRequired': 'Медицинският преглед е задължителен',
+  'modal.egnRequired': 'ЕГН е задължително',
+  'modal.egnInvalid': 'ЕГН трябва да е 10 цифри',
+  'modal.birthPlaceRequired': 'Месторождение е задължително',
   'modal.medicalValid': 'Валиден',
   'modal.courseDates': 'Курсови дати',
   'modal.courseStart': 'Начало на курса',
@@ -83,8 +93,8 @@ export default {
   'modal.uniqueNumberAuto': 'Уникален номер (автоматично генериран ако е празен)',
   'modal.uniqueNumberNext': 'Следващ',
   'modal.gapWarning': 'Има дупка в номерацията! Трябва да попълните {number} преди да продължите.',
-  'modal.uniqueNumberInvalid': 'Невалиден формат. Използвайте NNNN-NNN (напр. 3532-001)',
   'modal.uniqueNumberExists': 'Този уникален номер вече съществува',
+  'modal.completedGroupError': 'Не може да добавяте участник към приключила група',
   'modal.update': 'Обнови',
   
   // Group Status
@@ -126,6 +136,7 @@ export default {
   'tools.language': 'Език',
   'tools.activeGroup': 'Активна група',
   'tools.activeGroupSubtitle': 'В момента се провежда',
+  'tools.pendingAssignedOnClose': 'Предстои (ще се зададе при приключване)',
   'tools.groupNumber': 'Група',
   'tools.courseStart': 'Начало',
   'tools.courseEnd': 'Край',
@@ -318,4 +329,26 @@ export default {
   'archive.groups': 'групи',
   'archive.participants': 'участника',
   'archive.viewDetails': 'Виж детайли',
+  
+  // Crypto / Secure Backup
+  'crypto.passwordPlaceholder': 'Въведете парола за декриптиране',
+  'crypto.exportTitle': 'Защитен експорт',
+  'crypto.exportDescription': 'Криптирайте резервното копие с парола. Тази парола ще бъде необходима за възстановяване на данните.',
+  'crypto.importTitle': 'Декриптиране на архив',
+  'crypto.importDescription': 'Този архив е криптиран. Моля, въведете паролата, за да го декриптирате.',
+  'crypto.encryptAndExport': 'Криптирай и Експортирай',
+  'crypto.decryptAndImport': 'Декриптирай и Импортирай',
+  'crypto.invalidPassword': 'Невалидна парола или повреден файл',
+  
+  // Security
+  'security.title': 'Сигурност на приложението',
+  'security.enabled': 'Заключването активирано',
+  'security.disabled': 'Заключването деактивирано',
+  'security.active': 'Активно',
+  'security.inactive': 'Неактивно',
+  'security.descriptionEnabled': 'Приложението изисква ПИН код за отваряне. Заключва се автоматично след 10 минути бездействие.',
+  'security.descriptionDisabled': 'Защитете данните си, като зададете ПИН код.',
+  'security.lockNow': 'Заключи сега',
+  'security.disable': 'Деактивирай ПИН',
+  'security.setPin': 'Задай ПИН код',
 };

@@ -2,6 +2,7 @@ export default {
   // Navigation
   'nav.participants': 'Participants',
   'nav.tools': 'Tools',
+  'nav.lock': 'Lock',
   
   // Common
   'common.add': 'Add',
@@ -57,6 +58,12 @@ export default {
   'participant.notCompleted': 'Not Completed',
   'participant.manual': 'Manual',
   'participant.actions': 'Actions',
+  'participants.noParticipantsInGroup': 'No participants in this group',
+  'participants.noActive': 'No active group',
+  'participant.added': 'Added',
+  'participant.modified': 'Last modified',
+  'participant.egn': 'EGN', // Personal ID
+  'participant.birthPlace': 'Place of Birth',
   
   // Participant Modal
   'modal.addParticipant': 'Add Participant',
@@ -68,6 +75,9 @@ export default {
   'modal.personNameRequired': 'Person name is required',
   'modal.medicalDate': 'Medical Date',
   'modal.medicalDateRequired': 'Medical date is required',
+  'modal.egnRequired': 'EGN is required',
+  'modal.egnInvalid': 'EGN must be 10 digits',
+  'modal.birthPlaceRequired': 'Place of birth is required',
   'modal.medicalValid': 'Valid',
   'modal.courseDates': 'Course Dates',
   'modal.courseStart': 'Course Start',
@@ -85,6 +95,7 @@ export default {
   'modal.gapWarning': 'Gap detected in numbering! Must fill {number} before continuing.',
   'modal.uniqueNumberInvalid': 'Invalid format. Use NNNN-NNN (e.g., 3532-001)',
   'modal.uniqueNumberExists': 'This unique number already exists',
+  'modal.completedGroupError': 'Cannot add participant to a completed group',
   'modal.update': 'Update',
   
   // Group Status
@@ -140,6 +151,7 @@ export default {
   'tools.language': 'Language',
   'tools.activeGroup': 'Active Group',
   'tools.activeGroupSubtitle': 'Currently in progress',
+  'tools.pendingAssignedOnClose': 'Pending (assigned on close)',
   'tools.groupNumber': 'Group',
   'tools.courseStart': 'Start',
   'tools.courseEnd': 'End',
@@ -317,4 +329,26 @@ export default {
   'archive.groups': 'groups',
   'archive.participants': 'participants',
   'archive.viewDetails': 'View Details',
+  
+  // Crypto / Secure Backup
+  'crypto.passwordPlaceholder': 'Enter encryption password',
+  'crypto.exportTitle': 'Secure Export',
+  'crypto.exportDescription': 'Encrypt your backup with a password. You will need this password to restore the data.',
+  'crypto.importTitle': 'Decrypt Backup',
+  'crypto.importDescription': 'This backup is encrypted. Please enter the password to decrypt it.',
+  'crypto.encryptAndExport': 'Encrypt & Export',
+  'crypto.decryptAndImport': 'Decrypt & Import',
+  'crypto.invalidPassword': 'Invalid password or corrupted file',
+  
+  // Security
+  'security.title': 'App Security',
+  'security.enabled': 'App Lock Enabled',
+  'security.disabled': 'App Lock Disabled',
+  'security.active': 'Active',
+  'security.inactive': 'Inactive',
+  'security.descriptionEnabled': 'App requires a PIN to open. Auto-locks after 10 minutes of inactivity.',
+  'security.descriptionDisabled': 'Secure your data by setting a PIN code.',
+  'security.lockNow': 'Lock Now',
+  'security.disable': 'Disable PIN',
+  'security.setPin': 'Set PIN Code',
 };

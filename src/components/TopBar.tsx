@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Users, Settings } from 'lucide-react';
+import { Users, Settings, Lock } from 'lucide-react';
+import { isPinSet } from '../security/pinLock';
+import { triggerManualLock } from './security/AppLockGate';
 
 interface TopBarProps {
   activeTab: 'participants' | 'tools';
@@ -69,6 +71,18 @@ export const TopBar: React.FC<TopBarProps> = ({ activeTab, onTabChange, onBack }
               <Settings className="w-5 h-5" strokeWidth={2} />
               {t('nav.tools')}
             </button>
+
+            {/* Lock Button (Only if PIN is set) */}
+            {isPinSet() && (
+              <button
+                onClick={() => triggerManualLock()}
+                className="px-4 py-2 ml-2 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-500 border border-indigo-400/50 shadow-sm transition-all duration-150 flex items-center gap-2"
+                title={t('nav.lock')}
+              >
+                <Lock className="w-5 h-5" strokeWidth={2} />
+                <span className="hidden lg:inline">{t('nav.lock')}</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

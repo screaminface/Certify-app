@@ -22,8 +22,9 @@ export function GroupSection({
   isCollapsed,
   onToggle,
   children,
-  variant = 'active'
-}: GroupSectionProps) {
+  variant = 'active',
+  showCount = true
+}: GroupSectionProps & { showCount?: boolean }) {
   const variantConfig = {
     active: {
       bg: 'bg-blue-50',
@@ -80,14 +81,19 @@ export function GroupSection({
             )}
             
             {/* Count Badge with optional group numbers */}
-            {groupNumbers && groupNumbers.length > 0 ? (
-              <span className={`px-2.5 py-0.5 ${config.countBg} ${config.countText} rounded-full text-xs font-semibold`}>
-                {groupNumbers.length === 1 ? `№ ${groupNumbers[0]}` : `№ ${groupNumbers.join(', ')}`}
-              </span>
-            ) : (
-              <span className={`px-2.5 py-0.5 ${config.countBg} ${config.countText} rounded-full text-xs font-semibold`}>
-                {count}
-              </span>
+            {showCount && (
+              groupNumbers && groupNumbers.length > 0 ? (
+                <span className={`px-2.5 py-0.5 ${config.countBg} ${config.countText} rounded-full text-xs font-semibold`}>
+                  {groupNumbers.length === 1 ? `№ ${groupNumbers[0]}` : `№ ${groupNumbers.join(', ')}`}
+                </span>
+              ) : (
+                // Only show generic count for non-active groups (active is usually 1, which is redundant)
+                variant !== 'active' && (
+                  <span className={`px-2.5 py-0.5 ${config.countBg} ${config.countText} rounded-full text-xs font-semibold`}>
+                    {count}
+                  </span>
+                )
+              )
             )}
           </div>
           

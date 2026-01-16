@@ -4,9 +4,13 @@ import { db, Participant, Group, Settings } from '../db/database';
 import { useSettings } from '../hooks/useSettings';
 import { isUniqueNumberAvailable } from '../utils/uniqueNumberUtils';
 import { formatDateBG } from '../utils/medicalValidation';
-import { 
-  getActiveGroup, 
-  closeActiveGroup, 
+import { encryptBackupJson, decryptBackupJson, isEncryptedBackup, EncryptedBackup } from '../utils/cryptoUtils';
+import { migrateToLatest, CURRENT_BACKUP_VERSION } from '../utils/migrations/backupMigration';
+import { PasswordModal } from './ui/PasswordModal';
+import { AlertModal } from './ui/AlertModal';
+import {
+  getActiveGroup,
+  closeActiveGroup,
   getCompletedGroups,
   getPlannedGroups,
   makeGroupActive,
@@ -17,8 +21,11 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Settings as SettingsIcon, Calendar, Users, CheckCircle, ChevronDown, Clock, RotateCcw, X, ChevronRight, Upload, Package, FileSpreadsheet, FileText, Download, AlertTriangle, Archive, AlertCircle, Info, Activity, CalendarClock } from 'lucide-react';
+import { Settings as SettingsIcon, Calendar, Users, CheckCircle, ChevronDown, Clock, RotateCcw, X, ChevronRight, Upload, Package, FileSpreadsheet, FileText, Download, AlertTriangle, Archive, AlertCircle, Info, Activity, CalendarClock, Lock } from 'lucide-react';
 import ReactCountryFlag from 'react-country-flag';
+import { LockScreen } from './security/LockScreen';
+import { triggerManualLock } from './security/AppLockGate';
+import { isPinSet } from '../security/pinLock';
 
 interface ToolsPageProps {
   filteredParticipants: Participant[];
@@ -39,13 +46,38 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
   const [isImporting, setIsImporting] = useState(false);
   const [showDangerZone, setShowDangerZone] = useState(false);
 
+  // Generic Modals State
+  const [generalAlert, setGeneralAlert] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: 'success' | 'error' | 'info' | 'warning';
+  } | null>(null);
+
+  const [generalConfirm, setGeneralConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    variant?: 'danger' | 'warning' | 'info' | 'success';
+    confirmText?: string;
+  } | null>(null);
+
+  const showAlert = (title: string, message: string, variant: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    setGeneralAlert({ isOpen: true, title, message, variant });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void, variant: 'danger' | 'warning' | 'info' = 'info', confirmText?: string) => {
+    setGeneralConfirm({ isOpen: true, title, message, onConfirm, variant, confirmText: confirmText || t('common.confirm') });
+  };
+
   const [closeGroupAcknowledged, setCloseGroupAcknowledged] = useState(false);
   const [closeGroupConfirmText, setCloseGroupConfirmText] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [confirmAction, setConfirmAction] = useState<{
     type: 'makeActive' | 'reopen';
     groupId: string;
-    groupNumber: number;
+    groupNumber: number | null;
     currentActive: Group;
   } | null>(null);
   const [showAllArchived, setShowAllArchived] = useState(false);
@@ -55,6 +87,35 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
   const [archiveConfirmText, setArchiveConfirmText] = useState('');
   const [showArchiveViewer, setShowArchiveViewer] = useState(false);
   const [restoreGroup, setRestoreGroup] = useState<{ year: number; groupNumber: number } | null>(null);
+
+  // Crypto State
+  const [cryptoModal, setCryptoModal] = useState<{
+    isOpen: boolean;
+    mode: 'export' | 'import';
+    error?: string;
+    isProcessing: boolean;
+    pendingFile?: File | null;
+    pendingEncryptedData?: EncryptedBackup | null;
+    importMode?: 'merge' | 'replace';
+  }>({
+    isOpen: false,
+    mode: 'export',
+    isProcessing: false
+  });
+
+  // Security State
+  const [lockMode, setLockMode] = useState<'setup' | 'disable' | null>(null);
+  const [isAppLocked, setIsAppLocked] = useState(isPinSet());
+
+  const handleSecuritySuccess = () => {
+      setLockMode(null);
+      setIsAppLocked(isPinSet());
+      if (lockMode === 'setup') {
+          showAlert(t('common.success'), 'App Lock enabled successfully!', 'success');
+      } else if (lockMode === 'disable') {
+         showAlert(t('common.success'), 'App Lock disabled.', 'info');
+      }
+  };
 
   const activeGroup = useLiveQuery(() => getActiveGroup(), []);
   const plannedGroups = useLiveQuery(() => getPlannedGroups(), [refreshKey]);
@@ -70,157 +131,280 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
     return count === 1 ? 'participant' : 'participants';
   };
 
-  // Export full backup as JSON
-  const handleExportJSON = async () => {
+  // Reusable function to process decrypted/plain import data
+  const processImportData = async (rawData: any, mode: 'merge' | 'replace') => {
+    try {
+      // 1. Run Migration Logic
+      console.log('Validating and migrating backup...');
+      const backup = migrateToLatest(rawData);
+
+      // 2. Validate migrated data structure
+      if (!backup.groups || !backup.participants || !Array.isArray(backup.groups) || !Array.isArray(backup.participants)) {
+        throw new Error('Invalid backup format after migration: missing groups or participants arrays');
+      }
+
+      if (mode === 'replace') {
+        await db.participants.clear();
+        await db.groups.clear();
+        
+        for (const group of backup.groups) {
+          await db.groups.add(group);
+        }
+        for (const participant of backup.participants) {
+          await db.participants.add(participant);
+        }
+        if (backup.settings) {
+          await db.settings.update(1, backup.settings);
+        }
+      } else {
+        // Merge
+        // Import groups first
+        for (const group of backup.groups) {
+          const existing = await db.groups.get(group.id);
+          if (existing) {
+            await db.groups.update(group.id, group);
+          } else {
+            await db.groups.add(group);
+          }
+        }
+
+        // Import participants with collision resolution
+        for (const participant of backup.participants) {
+          const existing = await db.participants.get(participant.id);
+          
+          if (existing) {
+            await db.participants.update(participant.id, participant);
+          } else {
+            let uniqueNumber = participant.uniqueNumber;
+            let attempts = 0;
+            
+            while (!(await isUniqueNumberAvailable(uniqueNumber)) && attempts < 1000) {
+              const currentSettings = await db.settings.get(1);
+              if (currentSettings) {
+                const newPrefix = currentSettings.lastUniquePrefix + 1;
+                const newSeq = currentSettings.lastUniqueSeq + 1;
+                uniqueNumber = `${newPrefix.toString().padStart(4, '0')}-${newSeq.toString().padStart(3, '0')}`;
+                await db.settings.update(1, {
+                  lastUniquePrefix: newPrefix,
+                  lastUniqueSeq: newSeq
+                });
+              }
+              attempts++;
+            }
+
+            await db.participants.add({
+              ...participant,
+              uniqueNumber
+            });
+          }
+        }
+      }
+      showAlert(t('common.success'), `Import successful! Imported ${backup.participants.length} participants and ${backup.groups.length} groups.`, 'success');
+    } catch (error) {
+      console.error('Import processing failed:', error);
+      showAlert(t('common.error'), `Failed to import: ${(error as Error).message}`, 'error');
+    } finally {
+      setIsImporting(false);
+      setCryptoModal(prev => ({ ...prev, isOpen: false, isProcessing: false, pendingEncryptedData: null, pendingFile: null }));
+    }
+  };
+
+  // 1. Export Flow Trigger
+  const handleExportJSON = () => {
+    setCryptoModal({
+      isOpen: true,
+      mode: 'export',
+      isProcessing: false
+    });
+  };
+
+  // 2. Export Execution (After password confirmation)
+  const executeSecureExport = async (password: string) => {
+    setCryptoModal(prev => ({ ...prev, isProcessing: true, error: undefined }));
     try {
       const participants = await db.participants.toArray();
       const groups = await db.groups.toArray();
       const currentSettings = await db.settings.get(1);
 
       const backup: BackupData = {
-        version: '1.0',
+        version: CURRENT_BACKUP_VERSION.toString(),
         timestamp: new Date().toISOString(),
         participants,
         groups,
         settings: currentSettings!
       };
 
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      // Encrypt
+      const encryptedData = await encryptBackupJson(backup, password);
+      
+      const blob = new Blob([JSON.stringify(encryptedData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `course-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `course-backup-secure-${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      
+      setCryptoModal(prev => ({ ...prev, isOpen: false }));
     } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export backup');
+      console.error('Secure export failed:', error);
+      setCryptoModal(prev => ({ ...prev, error: 'Encryption failed. Please try again.' }));
+    } finally {
+      setCryptoModal(prev => ({ ...prev, isProcessing: false }));
     }
   };
 
-  // Import JSON - Merge mode
-  const handleImportMerge = async (file: File) => {
-    setIsImporting(true);
-    try {
-      const text = await file.text();
-      const backup: BackupData = JSON.parse(text);
+  // 3. Import Flow Trigger
+  const handleImportFileSelect = async (file: File, mode: 'merge' | 'replace') => {
+    const performImport = async () => {
+      setIsImporting(true);
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
 
-      // Import groups first
-      for (const group of backup.groups) {
-        const existing = await db.groups.get(group.id);
-        if (existing) {
-          await db.groups.update(group.id, group);
-        } else {
-          await db.groups.add(group);
-        }
-      }
+        // Robust check: strict guard OR simple property check
+        const looksEncrypted = isEncryptedBackup(data) || (
+          data && typeof data === 'object' && 'ciphertext' in data && 'salt' in data
+        );
 
-      // Import participants with collision resolution
-      for (const participant of backup.participants) {
-        const existing = await db.participants.get(participant.id);
-        
-        if (existing) {
-          await db.participants.update(participant.id, participant);
-        } else {
-          let uniqueNumber = participant.uniqueNumber;
-          let attempts = 0;
-          
-          while (!(await isUniqueNumberAvailable(uniqueNumber)) && attempts < 1000) {
-            const currentSettings = await db.settings.get(1);
-            if (currentSettings) {
-              const newPrefix = currentSettings.lastUniquePrefix + 1;
-              const newSeq = currentSettings.lastUniqueSeq + 1;
-              uniqueNumber = `${newPrefix.toString().padStart(4, '0')}-${newSeq.toString().padStart(3, '0')}`;
-              await db.settings.update(1, {
-                lastUniquePrefix: newPrefix,
-                lastUniqueSeq: newSeq
-              });
-            }
-            attempts++;
-          }
-
-          await db.participants.add({
-            ...participant,
-            uniqueNumber
+        if (looksEncrypted) {
+          // Encrypted - Open Password Modal
+          setCryptoModal({
+            isOpen: true,
+            mode: 'import',
+            isProcessing: false,
+            pendingEncryptedData: data,
+            importMode: mode,
+            pendingFile: file // unused but good for context
           });
+          setIsImporting(false); // Pause loading state while user types password
+        } else {
+          // Plaintext - Process immediately
+          await processImportData(data, mode);
         }
+      } catch (error) {
+        console.error('File parsing failed:', error);
+        showAlert(t('common.error'), 'Invalid file format. Please upload a valid backup JSON.', 'error');
+        setIsImporting(false);
       }
+    };
 
-      alert(`Import successful! Imported ${backup.participants.length} participants and ${backup.groups.length} groups.`);
-    } catch (error) {
-      console.error('Import failed:', error);
-      alert(`Failed to import: ${(error as Error).message}`);
-    } finally {
-      setIsImporting(false);
+    if (mode === 'replace') {
+      showConfirm(
+        'WARNING',
+        'WARNING: This will DELETE ALL existing data and replace it with the imported data. Are you sure?',
+        performImport,
+        'danger'
+      );
+    } else {
+      performImport();
     }
   };
 
-  // Import JSON - Replace mode
-  const handleImportReplace = async (file: File) => {
-    if (!window.confirm('WARNING: This will DELETE ALL existing data and replace it with the imported data. Are you sure?')) {
-      return;
-    }
-
+  // 4. Import Execution (After password decryption)
+  const executeSecureImport = async (password: string) => {
+    if (!cryptoModal.pendingEncryptedData || !cryptoModal.importMode) return;
+    
+    setCryptoModal(prev => ({ ...prev, isProcessing: true, error: undefined }));
     setIsImporting(true);
+
     try {
-      const text = await file.text();
-      const backup: BackupData = JSON.parse(text);
-
-      await db.participants.clear();
-      await db.groups.clear();
-
-      for (const group of backup.groups) {
-        await db.groups.add(group);
-      }
-
-      for (const participant of backup.participants) {
-        await db.participants.add(participant);
-      }
-
-      if (backup.settings) {
-        await db.settings.update(1, backup.settings);
-      }
-
-      alert(`Import successful! Imported ${backup.participants.length} participants and ${backup.groups.length} groups.`);
+      const decryptedData = await decryptBackupJson<BackupData>(cryptoModal.pendingEncryptedData, password);
+      await processImportData(decryptedData, cryptoModal.importMode);
+       // processImportData handles closing modal and clearing state
     } catch (error) {
-      console.error('Import failed:', error);
-      alert(`Failed to import: ${(error as Error).message}`);
-    } finally {
+      console.error('Decryption failed:', error);
+      setCryptoModal(prev => ({ 
+        ...prev, 
+        isProcessing: false, 
+        error: t('crypto.invalidPassword') 
+      }));
       setIsImporting(false);
     }
   };
 
   // Export Excel
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     try {
-      const data = filteredParticipants.map(p => ({
+      // 1. Fetch all relevant data
+      const groups = await db.groups.toArray();
+      const participants = filteredParticipants.length > 0 ? filteredParticipants : await db.participants.toArray();
+      
+      // 2. Build map of Group Status per Date
+      const groupStatusMap = new Map<string, string>(); // active, planned, completed
+      const groupNumberMap = new Map<string, number | null>();
+      
+      groups.forEach(g => {
+        groupStatusMap.set(g.courseStartDate, g.status);
+        groupNumberMap.set(g.courseStartDate, g.groupNumber);
+      });
+      
+      // 3. Segregate Participants
+      const activeParticipants: any[] = [];
+      const plannedParticipants: any[] = [];
+      const archivedParticipants: any[] = [];
+      const otherParticipants: any[] = []; 
+
+      // Helper to format row
+      const formatRow = (p: any) => ({
         'Company Name': p.companyName,
         'Person Name': p.personName,
         'Medical Date': formatDateBG(p.medicalDate),
-        'Course Start Date': formatDateBG(p.courseStartDate),
-        'Course End Date': formatDateBG(p.courseEndDate),
-        'Group Number': p.groupNumber,
+        'Course Start': formatDateBG(p.courseStartDate),
+        'Course End': formatDateBG(p.courseEndDate),
+        'Group No': groupNumberMap.get(p.courseStartDate) || '',
         'Unique Number': p.uniqueNumber,
         'Sent': p.sent ? 'Yes' : 'No',
         'Documents': p.documents ? 'Yes' : 'No',
         'Handed Over': p.handedOver ? 'Yes' : 'No',
         'Paid': p.paid ? 'Yes' : 'No',
         'Completed': (p.completedOverride !== null ? p.completedOverride : p.completedComputed) ? 'Yes' : 'No'
-      }));
+      });
 
-      const ws = XLSX.utils.json_to_sheet(data);
+      participants.forEach(p => {
+        const status = groupStatusMap.get(p.courseStartDate);
+        const row = formatRow(p);
+        
+        if (status === 'active') activeParticipants.push(row);
+        else if (status === 'planned') plannedParticipants.push(row);
+        else if (status === 'completed') archivedParticipants.push(row);
+        else otherParticipants.push(row);
+      });
+      
+      // 4. Create Workbook with sheets
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Participants');
+
+      const addSheet = (data: any[], name: string, sortFn?: (a: any, b: any) => number) => {
+          if (data.length === 0) return;
+          if (sortFn) data.sort(sortFn);
+          const ws = XLSX.utils.json_to_sheet(data);
+          // Auto-size columns
+          const cols = Object.keys(data[0] || {}).map(key => ({ wch: Math.max(key.length, 15) }));
+          ws['!cols'] = cols;
+          XLSX.utils.book_append_sheet(wb, ws, name);
+      };
+
+      // Add sheets in priority order
+      addSheet(activeParticipants, "Active Groups", (a, b) => (a['Unique Number'] || '').localeCompare(b['Unique Number'] || ''));
+      addSheet(plannedParticipants, "Planned Groups", (a, b) => a['Course Start'].localeCompare(b['Course Start']));
+      addSheet(archivedParticipants, "Archived Groups", (a, b) => (b['Group No'] || 0) - (a['Group No'] || 0));
+      addSheet(otherParticipants, "Other");
+
+      // If absolutely no data, create a blank sheet
+      if (wb.SheetNames.length === 0) {
+         const ws = XLSX.utils.json_to_sheet([{ Info: "No data found to export" }]);
+         XLSX.utils.book_append_sheet(wb, ws, "Empty");
+      }
       
       XLSX.writeFile(wb, `course-export-${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (error) {
       console.error('Excel export failed:', error);
-      alert('Failed to export Excel file');
+      showAlert(t('common.error'), 'Failed to export Excel file', 'error');
     }
   };
 
   // Export CSV
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
     try {
       const headers = [
         'Company Name',
@@ -237,13 +421,16 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
         'Completed'
       ];
 
+      const groups = filteredParticipants.length > 0 ? await db.groups.toArray() : [];
+      const groupMap = new Map(groups.map(g => [g.courseStartDate, g.groupNumber]));
+
       const rows = filteredParticipants.map(p => [
         p.companyName,
         p.personName,
         formatDateBG(p.medicalDate),
         formatDateBG(p.courseStartDate),
         formatDateBG(p.courseEndDate),
-        p.groupNumber,
+        groupMap.get(p.courseStartDate) || '',
         p.uniqueNumber,
         p.sent ? 'Yes' : 'No',
         p.documents ? 'Yes' : 'No',
@@ -266,7 +453,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('CSV export failed:', error);
-      alert('Failed to export CSV file');
+      showAlert(t('common.error'), 'Failed to export CSV file', 'error');
     }
   };
 
@@ -277,23 +464,23 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       const archive = await db.yearlyArchives.get(archiveId);
       
       if (!archive) {
-        alert(t('tools.restoreGroupNotFound'));
+        showAlert(t('common.error'), t('tools.restoreGroupNotFound'), 'error');
         return;
       }
       
       // Find the group and its participants
       const groupToRestore = archive.groups.find(g => g.groupNumber === groupNumber);
-      const participantsToRestore = archive.participants.filter(p => p.groupNumber === groupNumber);
-      
       if (!groupToRestore) {
-        alert(t('tools.restoreGroupGroupNotFound'));
+        showAlert(t('common.error'), t('tools.restoreGroupGroupNotFound'), 'error');
         return;
       }
+
+      const participantsToRestore = archive.participants.filter(p => p.courseStartDate === groupToRestore.courseStartDate);
       
       // Check if group number already exists in active groups
       const existingGroup = await db.groups.where('groupNumber').equals(groupNumber).first();
       if (existingGroup) {
-        alert(t('tools.restoreGroupExists', { number: groupNumber.toString() }));
+        showAlert(t('common.error'), t('tools.restoreGroupExists', { number: groupNumber.toString() }), 'error');
         return;
       }
       
@@ -310,7 +497,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       
       // Remove from archive
       const updatedGroups = archive.groups.filter(g => g.groupNumber !== groupNumber);
-      const updatedParticipants = archive.participants.filter(p => p.groupNumber !== groupNumber);
+      const updatedParticipants = archive.participants.filter(p => p.courseStartDate !== groupToRestore.courseStartDate);
       
       if (updatedGroups.length === 0) {
         // If no groups left, delete the entire archive
@@ -323,11 +510,11 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
         });
       }
       
-      alert(t('tools.restoreGroupSuccess', { number: groupNumber.toString() }));
+      showAlert(t('common.success'), t('tools.restoreGroupSuccess', { number: groupNumber.toString() }), 'success');
       setRestoreGroup(null);
     } catch (error) {
       console.error('Restore failed:', error);
-      alert(t('tools.restoreGroupError', { error: (error as Error).message }));
+      showAlert(t('common.error'), t('tools.restoreGroupError', { error: (error as Error).message }), 'error');
     }
   };
 
@@ -343,7 +530,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       const hasPlannedGroups = groups.some(g => g.status === 'planned');
       
       if (hasActiveGroups || hasPlannedGroups) {
-        alert(t('tools.archiveGuardFail'));
+        showAlert(t('common.warning'), t('tools.archiveGuardFail'), 'warning');
         setShowArchiveModal(false);
         setArchiveConfirmText('');
         return;
@@ -357,14 +544,14 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       });
       
       if (completedGroupsThisYear.length === 0) {
-        alert(t('archive.noGroupsToArchive'));
+        showAlert(t('common.info'), t('archive.noGroupsToArchive'), 'info');
         setShowArchiveModal(false);
         setArchiveConfirmText('');
         return;
       }
       
-      const groupNumbers = new Set(completedGroupsThisYear.map(g => g.groupNumber));
-      const participantsToArchive = participants.filter(p => groupNumbers.has(p.groupNumber));
+      const completedGroupDates = new Set(completedGroupsThisYear.map(g => g.courseStartDate));
+      const participantsToArchive = participants.filter(p => completedGroupDates.has(p.courseStartDate));
       
       // Create archive entry
       const archiveId = `archive-${currentYear}`;
@@ -390,12 +577,12 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
         });
       }
       
-      alert(t('tools.archiveYearSuccess', { count: completedGroupsThisYear.length.toString() }));
+      showAlert(t('common.success'), t('tools.archiveYearSuccess', { count: completedGroupsThisYear.length.toString() }), 'success');
       setShowArchiveModal(false);
       setArchiveConfirmText('');
     } catch (error) {
       console.error('Archive failed:', error);
-      alert(t('archive.error'));
+      showAlert(t('common.error'), t('archive.error'), 'error');
     }
   };
 
@@ -418,11 +605,11 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
         setRefreshKey(prev => prev + 1);
         const group = await db.groups.get(groupId);
         if (group) {
-          alert(t('tools.makeActiveSuccess', { number: group.groupNumber.toString() }));
+          showAlert(t('common.success'), t('tools.makeActiveSuccess', { number: group.groupNumber ? group.groupNumber.toString() : 'Active' }), 'success');
         }
       }
     } catch (error) {
-      alert(`${t('common.error')}: ${(error as Error).message}`);
+      showAlert(t('common.error'), `${t('common.error')}: ${(error as Error).message}`, 'error');
     }
   };
 
@@ -443,10 +630,10 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
         }
       } else if (result.success) {
         setRefreshKey(prev => prev + 1);
-        alert(t('tools.reopenSuccess'));
+        showAlert(t('common.success'), t('tools.reopenSuccess'), 'success');
       }
     } catch (error) {
-      alert(`${t('common.error')}: ${(error as Error).message}`);
+      showAlert(t('common.error'), `${t('common.error')}: ${(error as Error).message}`, 'error');
     }
   };
 
@@ -461,29 +648,48 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       await activateGroupDirectly(confirmAction.groupId, true);
       setConfirmAction(null);
       setRefreshKey(prev => prev + 1);
-      alert(t('tools.makeActiveWithSwapSuccess', { new: newGroupNumber.toString(), old: oldGroupNumber.toString() }));
+      showAlert(t('common.success'), t('tools.makeActiveWithSwapSuccess', { new: newGroupNumber?.toString() || 'Active', old: oldGroupNumber?.toString() || 'Active' }), 'success');
     } catch (error) {
-      alert(`${t('common.error')}: ${(error as Error).message}`);
+      showAlert(t('common.error'), `${t('common.error')}: ${(error as Error).message}`, 'error');
     }
   };
 
   // Handle set active to planned
   const handleSetActiveToPlanned = async () => {
-    if (!window.confirm(t('tools.returnToPlannedConfirm'))) {
-      return;
-    }
-    
-    try {
-      await setActiveToPlanned();
-      setRefreshKey(prev => prev + 1);
-      alert(t('tools.returnToPlannedSuccess'));
-    } catch (error) {
-      alert(`${t('common.error')}: ${(error as Error).message}`);
-    }
+    showConfirm(
+      t('tools.returnToPlanned'),
+      t('tools.returnToPlannedConfirm'),
+      async () => {
+        try {
+          await setActiveToPlanned();
+          setRefreshKey(prev => prev + 1);
+          showAlert(t('common.success'), t('tools.returnToPlannedSuccess'), 'success');
+        } catch (error) {
+          showAlert(t('common.error'), `${t('common.error')}: ${(error as Error).message}`, 'error');
+        }
+      },
+      'warning'
+    );
   };
 
   return (
     <div className="space-y-6 pb-24 md:pb-6">
+      {/* Password Modal for Secure Backup */}
+      <PasswordModal
+        isOpen={cryptoModal.isOpen}
+        mode={cryptoModal.mode}
+        isProcessing={cryptoModal.isProcessing}
+        error={cryptoModal.error}
+        onCancel={() => setCryptoModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={(password) => {
+          if (cryptoModal.mode === 'export') {
+            executeSecureExport(password);
+          } else {
+            executeSecureImport(password);
+          }
+        }}
+      />
+
       {/* Language Switcher */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
         <h3 className="text-lg font-bold text-slate-900 mb-4">{t('tools.language')}</h3>
@@ -533,7 +739,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
           </div>
           <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
             <div className="space-y-2 text-sm text-slate-700">
-              <p><strong>{t('tools.groupNumber')}:</strong> {activeGroup.groupNumber}</p>
+              <p><strong>{t('tools.groupNumber')}:</strong> {activeGroup.groupNumber || <span className="italic text-slate-500">{t('tools.pendingAssignedOnClose')}</span>}</p>
               <p><strong>{t('tools.courseStart')}:</strong> {formatDateBG(activeGroup.courseStartDate)}</p>
               <p><strong>{t('tools.courseEnd')}:</strong> {formatDateBG(activeGroup.courseEndDate)}</p>
             </div>
@@ -556,13 +762,13 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
             {/* Type to confirm */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Type <code className="bg-slate-200 px-2 py-1 rounded">CLOSE-{activeGroup.groupNumber}</code> to confirm:
+                Type <code className="bg-slate-200 px-2 py-1 rounded">{activeGroup.groupNumber ? `CLOSE-${activeGroup.groupNumber}` : 'CLOSE'}</code> to confirm:
               </label>
               <input
                 type="text"
                 value={closeGroupConfirmText}
                 onChange={(e) => setCloseGroupConfirmText(e.target.value)}
-                placeholder={`CLOSE-${activeGroup.groupNumber}`}
+                placeholder={activeGroup.groupNumber ? `CLOSE-${activeGroup.groupNumber}` : 'CLOSE'}
                 className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[44px]"
                 disabled={!closeGroupAcknowledged}
               />
@@ -583,13 +789,13 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
                     setCloseGroupAcknowledged(false);
                     setCloseGroupConfirmText('');
                     setRefreshKey(prev => prev + 1);
-                    alert(t('tools.closeActiveSuccess'));
+                    showAlert(t('common.success'), t('tools.closeActiveSuccess'), 'success');
                   } catch (error) {
                     console.error('Failed to close active group:', error);
-                    alert(`${t('common.error')}: ${(error as Error).message}`);
+                    showAlert(t('common.error'), `${t('common.error')}: ${(error as Error).message}`, 'error');
                   }
                 }}
-                disabled={!closeGroupAcknowledged || closeGroupConfirmText !== `CLOSE-${activeGroup.groupNumber}`}
+                disabled={!closeGroupAcknowledged || closeGroupConfirmText !== (activeGroup.groupNumber ? `CLOSE-${activeGroup.groupNumber}` : 'CLOSE')}
                 className="px-6 py-4 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold min-h-[48px] transition-colors duration-150"
               >
                 ✓ {t('tools.archiveGroup')}
@@ -604,7 +810,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
         <ConfirmModal
           isOpen={true}
           title={t('tools.changeActiveGroup')}
-          message={t('tools.changeActiveGroupMessage', { current: confirmAction.currentActive.groupNumber.toString(), new: confirmAction.groupNumber.toString() })}
+          message={t('tools.changeActiveGroupMessage', { current: (confirmAction.currentActive.groupNumber || 'Active').toString(), new: (confirmAction.groupNumber || 'Active').toString() })}
           confirmText={t('tools.changeActiveGroupConfirm')}
           cancelText={t('common.cancel')}
           onConfirm={confirmMoveCurrentToPlanned}
@@ -624,7 +830,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
           </div>
           <div className="space-y-3">
             {plannedGroups.map((group) => {
-              const participantCount = allParticipants?.filter(p => p.groupNumber === group.groupNumber).length || 0;
+              const participantCount = allParticipants?.filter(p => p.courseStartDate === group.courseStartDate).length || 0;
               
               return (
                 <div key={group.id} className="border border-amber-200 rounded-lg p-4 bg-amber-50 hover:shadow-md hover:border-amber-300 transition-all duration-200">
@@ -686,7 +892,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
           </div>
           <div className="space-y-3">
             {(showAllArchived ? completedGroups : completedGroups.slice(0, 2)).map((group) => {
-              const participantCount = allParticipants?.filter(p => p.groupNumber === group.groupNumber).length || 0;
+              const participantCount = allParticipants?.filter(p => p.courseStartDate === group.courseStartDate).length || 0;
               
               return (
                 <div key={group.id} className="border border-slate-300 rounded-lg p-4 bg-slate-50 hover:shadow-md hover:border-slate-400 transition-all duration-200">
@@ -746,7 +952,12 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
 
       {/* Export Section */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-        <h3 className="text-lg font-bold text-slate-900 mb-4">{t('tools.exportData')}</h3>
+        <div className="flex items-center gap-2 mb-4">
+          <h3 className="text-lg font-bold text-slate-900">{t('tools.exportData')}</h3>
+          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium border border-blue-200 flex items-center gap-1">
+            <Lock size={12} /> Secure
+          </span>
+        </div>
         <div className="space-y-3">
           <button
             onClick={handleExportJSON}
@@ -779,7 +990,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
         <h3 className="text-lg font-bold text-slate-900 mb-4">{t('tools.importData')}</h3>
         <div className="space-y-3">
-          <label className="block w-full px-6 py-4 bg-blue-100 text-blue-800 border border-blue-300 rounded-lg hover:bg-blue-200 hover:border-blue-400 cursor-pointer text-center font-medium min-h-[48px] transition-all duration-150 flex items-center justify-center gap-2">
+          <label className="w-full px-6 py-4 bg-blue-100 text-blue-800 border border-blue-300 rounded-lg hover:bg-blue-200 hover:border-blue-400 cursor-pointer text-center font-medium min-h-[48px] transition-all duration-150 flex items-center justify-center gap-2">
             <Download className="w-5 h-5" strokeWidth={2} />
             {t('tools.importMerge')}
             <input
@@ -787,35 +998,95 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
               accept=".json"
               onChange={(e) => {
                 if (e.target.files?.[0]) {
-                  handleImportMerge(e.target.files[0]);
+                  handleImportFileSelect(e.target.files[0], 'merge');
+                  e.target.value = ''; // reset so same file can be selected again
                 }
               }}
               className="hidden"
               disabled={isImporting}
             />
           </label>
-          <label className="block w-full px-6 py-4 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer text-center font-medium min-h-[48px] transition-colors duration-150 flex items-center justify-center gap-2">
-            <AlertTriangle className="w-5 h-5" strokeWidth={2} />
-            {t('tools.importReplace')}
-            <input
-              type="file"
-              accept=".json"
-              onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  handleImportReplace(e.target.files[0]);
-                }
-              }}
-              className="hidden"
-              disabled={isImporting}
-            />
-          </label>
+
+          <label className="w-full px-6 py-4 bg-amber-100 text-amber-800 border border-amber-300 rounded-lg hover:bg-amber-200 hover:border-amber-400 cursor-pointer text-center font-medium min-h-[48px] transition-all duration-150 flex items-center justify-center gap-2">
+             <AlertTriangle className="w-5 h-5" strokeWidth={2} />
+             {t('tools.importReplace')}
+             <input
+               type="file"
+               accept=".json"
+               onChange={(e) => {
+                 if (e.target.files?.[0]) {
+                   handleImportFileSelect(e.target.files[0], 'replace');
+                   e.target.value = '';
+                 }
+               }}
+               className="hidden"
+               disabled={isImporting}
+             />
+           </label>
         </div>
         <p className="text-xs text-slate-500 mt-3">
-          {t('tools.importMergeNote')}
+          {t('tools.importMergeNote')} <br />
+          <span className="text-amber-600 font-semibold">{t('tools.importReplaceWarning')}</span>
         </p>
-        {isImporting && (
-          <p className="text-sm text-blue-600 mt-3 font-medium">{t('common.loading')}</p>
+        {(isImporting && !cryptoModal.isOpen) && (
+          <div className="text-center mt-4 text-blue-600 font-medium animate-pulse">
+            Processing...
+          </div>
         )}
+      </div>
+
+
+
+      {/* Security Settings */}
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Lock className="w-5 h-5 text-slate-900" />
+            <h3 className="text-lg font-bold text-slate-900">{t('security.title')}</h3>
+          </div>
+          <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                   <h4 className="font-semibold text-slate-700">
+                      {isAppLocked ? t('security.enabled') : t('security.disabled')}
+                   </h4>
+                   {isAppLocked ? (
+                       <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{t('security.active')}</span>
+                   ) : (
+                       <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-medium">{t('security.inactive')}</span>
+                   )}
+                </div>
+                <p className="text-sm text-slate-500 max-w-md">
+                  {isAppLocked 
+                    ? t('security.descriptionEnabled') 
+                    : t('security.descriptionDisabled')}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                {isAppLocked ? (
+                  <>
+                    <button
+                       onClick={() => triggerManualLock()}
+                       className="px-4 py-2 bg-slate-800 text-white hover:bg-slate-900 rounded-lg text-sm font-medium transition-colors shadow-sm"
+                    >
+                       {t('security.lockNow')}
+                    </button>
+                    <button
+                       onClick={() => setLockMode('disable')}
+                       className="px-4 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg text-sm font-medium transition-colors"
+                    >
+                       {t('security.disable')}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                     onClick={() => setLockMode('setup')}
+                     className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors shadow-sm"
+                  >
+                     {t('security.setPin')}
+                  </button>
+                )}
+              </div>
+          </div>
       </div>
 
       {/* Advanced Section with Danger Zone */}
@@ -840,7 +1111,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
             />
             
             {/* Yearly Reset Section */}
-            <DangerZoneReset />
+            <DangerZoneReset showAlert={showAlert} />
           </div>
         )}
       </div>
@@ -882,8 +1153,42 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
         message={t('tools.restoreGroupMessage', { number: restoreGroup?.groupNumber?.toString() || '' })}
         confirmText={t('tools.restoreGroupConfirm')}
         cancelText={t('common.cancel')}
+        variant="warning"
       />
 
+      {/* Generic Alert Modal */}
+      {generalAlert && (
+        <AlertModal
+          isOpen={generalAlert.isOpen}
+          onClose={() => setGeneralAlert(null)}
+          title={generalAlert.title}
+          message={generalAlert.message}
+          variant={generalAlert.variant}
+        />
+      )}
+
+      {/* Generic Confirm Modal */}
+      {generalConfirm && (
+        <ConfirmModal
+          isOpen={generalConfirm.isOpen}
+          onClose={() => setGeneralConfirm(null)}
+          onConfirm={generalConfirm.onConfirm}
+          title={generalConfirm.title}
+          message={generalConfirm.message}
+          confirmText={generalConfirm.confirmText}
+          cancelText={t('common.cancel')}
+          variant={generalConfirm.variant}
+        />
+      )}
+
+      {/* Lock Screen Modal (Setup/Disable) */}
+      {lockMode && (
+        <LockScreen 
+          mode={lockMode} 
+          onSuccess={handleSecuritySuccess} 
+          onCancel={() => setLockMode(null)} 
+        />
+      )}
     </div>
   );
 };
@@ -911,7 +1216,7 @@ const YearlyArchiveSection: React.FC<{
   }) || [];
   
   const participantsCount = allParticipants?.filter(p => 
-    completedGroupsThisYear.some(g => g.groupNumber === p.groupNumber)
+    completedGroupsThisYear.some(g => g.courseStartDate === p.courseStartDate)
   ).length || 0;
 
   return (
@@ -1033,7 +1338,7 @@ const YearlyArchiveModal: React.FC<{
   }) || [];
   
   const participantsCount = allParticipants?.filter(p => 
-    completedGroupsThisYear.some(g => g.groupNumber === p.groupNumber)
+    completedGroupsThisYear.some(g => g.courseStartDate === p.courseStartDate)
   ).length || 0;
 
   const requiredText = `ARCHIVE-${currentYear}`;
@@ -1240,7 +1545,11 @@ const YearlyArchiveViewer: React.FC<{
 };
 
 // Danger Zone Component for Yearly Reset
-const DangerZoneReset: React.FC = () => {
+interface DangerZoneResetProps {
+  showAlert: (title: string, message: string, variant: 'success' | 'error' | 'info' | 'warning') => void;
+}
+
+const DangerZoneReset: React.FC<DangerZoneResetProps> = ({ showAlert }) => {
   const { settings, resetYearlySequence } = useSettings();
   const { t } = useLanguage();
   const [acknowledged, setAcknowledged] = useState(false);
@@ -1265,13 +1574,13 @@ const DangerZoneReset: React.FC = () => {
   const handleFinalConfirm = async () => {
     try {
       await resetYearlySequence();
-      alert(t('tools.resetSequenceSuccess'));
+      showAlert(t('common.success'), t('tools.resetSequenceSuccess'), 'success');
       setAcknowledged(false);
       setConfirmText('');
       setShowFinalConfirm(false);
     } catch (error) {
       console.error('Failed to reset sequence:', error);
-      alert(t('tools.resetSequenceFailed'));
+      showAlert(t('common.error'), t('tools.resetSequenceFailed'), 'error');
     }
   };
 

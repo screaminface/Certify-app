@@ -25,7 +25,7 @@ export function useParticipants() {
   // Add a new participant
   const addParticipant = async (input: ParticipantInput): Promise<Participant> => {
     // Compute course dates first
-    const { courseStartDate, courseEndDate } = computeCourseDates(input.medicalDate);
+    const { courseStartDate } = computeCourseDates(input.medicalDate);
 
     // MEDICAL VALIDATION - Check if medical is valid for this course
     // Medical must be within 6 months BEFORE the course start date
@@ -33,12 +33,36 @@ export function useParticipants() {
       throw new Error(MEDICAL_EXPIRED_MESSAGE);
     }
 
-    // Check if we should auto-assign to active or planned period
-    // Rule: If courseStart matches active.startDate => add to active
-    //       Else add to planned period matching courseStart (create if doesn't exist)
-    const { group: suggestedGroup, shouldCreate } = await getSuggestedGroup(courseStartDate);
+    // Check for smart group suggestion (handles completed groups by skipping to next)
+    const { group: suggestedGroup, shouldCreate, createsForDate } = await getSuggestedGroup(input.medicalDate);
     
-    // Block adding to completed groups
+    // Determine the actual course start date to use
+    // If a group was found, use its date. If creating, use strict date OR shifted date.
+    const finalCourseStartDate = suggestedGroup 
+      ? suggestedGroup.courseStartDate 
+      : (createsForDate || courseStartDate);
+
+    const finalCourseEndDate = (() => {
+      const d = new Date(finalCourseStartDate);
+      d.setDate(d.getDate() + 7);
+      return d.toISOString().split('T')[0];
+    })();
+
+    // FINAL VALIDITY CHECK
+    // Ensure medical is valid for the strictly determined date
+    // Note: getSuggestedGroup already checks validity for candidate dates, but good to be safe.
+    if (!isMedicalValidForCourse(input.medicalDate, finalCourseStartDate)) {
+       throw new Error(MEDICAL_EXPIRED_MESSAGE);
+    }
+    
+    // SAFETY NET: Check for completed groups on this date (handling duplicate scenarios)
+    // Even if getSuggestedGroup skipped it, we must ensure we don't accidentally write to a date that has a completed group
+    const groupsForDate = await db.groups.where('courseStartDate').equals(finalCourseStartDate).toArray();
+    if (groupsForDate.some(g => g.status === 'completed')) {
+      throw new Error('Не може да добавяте нови участници към приключила група (периодът е архивиран).');
+    }
+
+    // Block adding to completed groups (Extra safeguard, though getSuggestedGroup shouldn't return one)
     if (suggestedGroup?.status === 'completed') {
       throw new Error('Не може да добавяте нови участници към приключила група.');
     }
@@ -47,7 +71,7 @@ export function useParticipants() {
     if (shouldCreate) {
       const activeGroup = await getActiveGroup();
       const status = activeGroup ? 'planned' : 'active'; // First group is active
-      await createGroup(courseStartDate, status);
+      await createGroup(finalCourseStartDate, status);
     }
 
     // Generate or validate unique number
@@ -81,8 +105,8 @@ export function useParticipants() {
       birthPlace: input.birthPlace || '',
       citizenship: input.citizenship || 'българско',
       medicalDate: input.medicalDate,
-      courseStartDate,
-      courseEndDate,
+      courseStartDate: finalCourseStartDate,
+      courseEndDate: finalCourseEndDate,
       uniqueNumber,
       sent: false,
       documents: false,
@@ -194,9 +218,20 @@ export function useParticipants() {
 
   // Delete a participant
   const deleteParticipant = async (id: string): Promise<void> => {
+    // 1. Get participant before delete to know if we need to realign
+    const participant = await db.participants.get(id);
+    
+    // 2. Delete from DB
     await db.participants.delete(id);
     
-    // Sync groups table to ensure all periods exist
+    // 3. Realign numbers if they had one
+    if (participant && participant.uniqueNumber) {
+        // Dynamic import to avoid circular dependencies if any
+        const { realignUniqueNumbers } = await import('../utils/uniqueNumberUtils');
+        await realignUniqueNumbers(participant.uniqueNumber);
+    }
+    
+    // 4. Sync groups table to ensure all periods exist
     await syncGroups();
   };
 

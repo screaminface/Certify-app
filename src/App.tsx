@@ -16,6 +16,8 @@ import { Participant } from './db/database';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { useLanguage } from './contexts/LanguageContext';
 import { ensureSingleActiveGroup } from './utils/groupUtils';
+import { AppLockGate } from './components/security/AppLockGate';
+
 
 function AppContent() {
   const { t } = useLanguage();
@@ -34,15 +36,19 @@ function AppContent() {
   useEffect(() => {
     const init = async () => {
       try {
+        console.log("App initializing...");
         await ensureSingleActiveGroup();
         // Sync groups to fix any missing numbers and ensure future periods exist
         const { syncGroups } = await import('./utils/groupUtils');
         await syncGroups();
+        console.log("App initialization complete.");
       } catch (err) {
-         console.error('Failed to initialize groups:', err);
+         console.error('CRITICAL: Failed to initialize groups:', err);
+         // We might want to trigger error boundary here if essential
       }
     };
-    init();
+    // Small delay to allow Dexie to settle if concurrent opens happen
+    setTimeout(init, 100);
   }, []);
 
   // Filter states
@@ -216,6 +222,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <AppLockGate>
       {/* Top Bar */}
       <TopBar activeTab={activeTab} onTabChange={setActiveTab} />
 
@@ -352,6 +359,7 @@ function AppContent() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
+      </AppLockGate>
     </div>
   );
 }

@@ -168,16 +168,25 @@ export const db = new AppDatabase();
 
 // Initialize settings if not exists
 export async function initializeSettings() {
-  const count = await db.settings.count();
-  if (count === 0) {
-    await db.settings.add({
-      id: 1,
-      lastUniquePrefix: 3530,
-      lastUniqueSeq: 0,
-      lastResetYear: null
-    });
+  try {
+    const count = await db.settings.count();
+    if (count === 0) {
+      await db.settings.add({
+        id: 1,
+        lastUniquePrefix: 3533,
+        lastUniqueSeq: 0,
+        lastResetYear: null
+      });
+    }
+  } catch (err) {
+    console.error('Failed to initialize settings:', err);
+    // If table doesn't exist, it might be due to broken schema or deletion.
+    // We swallow the error here to allow ErrorBoundary to render options,
+    // rather than crushing the JS thread.
   }
 }
 
-// Call on app start
-initializeSettings();
+// Call on app start - safely
+initializeSettings().catch(err => {
+  console.error('CRITICAL DB INIT FAILURE:', err);
+});

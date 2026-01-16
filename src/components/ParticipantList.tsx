@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Participant } from '../db/database';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Participant, db, Group } from '../db/database';
 import { useParticipants } from '../hooks/useParticipants';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ConfirmModal } from './ui/ConfirmModal';
@@ -8,10 +8,11 @@ import { BulkActionBar } from './ui/BulkActionBar';
 import { GroupSection } from './ui/GroupSection';
 import { ArchivedGroupAccordion } from './ui/ArchivedGroupAccordion';
 import { formatDateBG } from '../utils/medicalValidation';
-import { syncGroupDates, isGroupReadOnly } from '../utils/groupUtils';
+import { isGroupReadOnly } from '../utils/groupUtils';
 import { generateCertificate } from '../utils/certificateGenerator';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/database';
+import { AlertModal } from './ui/AlertModal';
+
 
 interface ParticipantListProps {
   participants: Participant[];
@@ -38,7 +39,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   hasActiveFilters,
   groupRefreshKey = 0
 }) => {
-  const { updateParticipant, resetCompletedOverride } = useParticipants();
+  const { updateParticipant } = useParticipants();
   const { t } = useLanguage();
   const [sortBy, setSortBy] = useState<'courseStartDate' | 'groupNumber' | 'uniqueNumber'>('uniqueNumber');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -47,12 +48,40 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     isOpen: false,
     participant: undefined
   });
+  
+  // Tooltip state
+  const [tooltip, setTooltip] = useState<{ participant: Participant, x: number, y: number } | null>(null);
 
-  // Get all groups for status and lock lookup
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: 'success' | 'error' | 'info' | 'warning';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'info'
+  });
+
+  const handleNameMouseEnter = (e: React.MouseEvent, participant: Participant) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltip({
+      participant,
+      x: rect.left,
+      y: rect.top - 8 // Position slightly above
+    });
+  };
+
+  const handleNameMouseLeave = () => {
+    setTooltip(null);
+  };
+
   const groups = useLiveQuery(() => db.groups.toArray(), [groupRefreshKey]);
   const groupMap = useMemo(() => {
-    if (!groups) return new Map();
-    return new Map(groups.map(g => [g.groupNumber, g]));
+    if (!groups) return new Map<string, Group>();
+    // Map by courseStartDate
+    return new Map(groups.map(g => [g.courseStartDate, g]));
   }, [groups]);
 
   // Sort participants
@@ -62,7 +91,8 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       if (sortBy === 'courseStartDate') {
         comparison = a.courseStartDate.localeCompare(b.courseStartDate);
       } else if (sortBy === 'groupNumber') {
-        comparison = a.groupNumber - b.groupNumber;
+        // Sort by date instead of group number (since groupNumber is gone from participant)
+        comparison = a.courseStartDate.localeCompare(b.courseStartDate);
       } else if (sortBy === 'uniqueNumber') {
         comparison = a.uniqueNumber.localeCompare(b.uniqueNumber);
       }
@@ -78,10 +108,11 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     const completed: Participant[] = [];
 
     sortedParticipants.forEach(p => {
-      const group = groupMap.get(p.groupNumber);
+      const group = groupMap.get(p.courseStartDate);
+      
       if (!group) {
-        // If group not found, treat as active
-        active.push(p);
+        // If group not found (orphan), treat as planned
+        planned.push(p);
         return;
       }
 
@@ -97,110 +128,158 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     return { active, planned, completed };
   }, [sortedParticipants, groupMap]);
 
-  // Get active group for date display
-  const activeGroup = useMemo(() => {
-    return groups?.find(g => g.status === 'active');
-  }, [groups]);
+  // Find active group for display metadata
+  const activeGroup = useMemo(() => groups?.find(g => g.status === 'active'), [groups]);
+  const activeGroupNumber = activeGroup?.groupNumber ? [activeGroup.groupNumber] : [];
+  const activeDateRange = activeGroup ? `${formatDateBG(activeGroup.courseStartDate)} - ${formatDateBG(activeGroup.courseEndDate)}` : undefined;
 
-  // Group planned participants by group number for visual separation
-  const plannedGroupedByNumber = useMemo(() => {
-    const grouped = new Map<number, { group: any; participants: Participant[] }>();
+  // Group Active participants by courseStartDate (handle multiple active groups edge case)
+  const activeGroupedByDate = useMemo(() => {
+    const grouped = new Map<string, { group: Group; participants: Participant[] }>();
     
-    participantsByStatus.planned.forEach(p => {
-      const group = groupMap.get(p.groupNumber);
-      if (!group) return;
-      
-      if (!grouped.has(p.groupNumber)) {
-        grouped.set(p.groupNumber, { group, participants: [] });
+    // 1. Find all active groups
+    groups?.forEach(g => {
+      if (g.status === 'active') {
+        grouped.set(g.courseStartDate, { group: g, participants: [] });
       }
-      grouped.get(p.groupNumber)!.participants.push(p);
+    });
+
+    // 2. Distribute participants
+    participantsByStatus.active.forEach(p => {
+       const existing = grouped.get(p.courseStartDate);
+       if (existing) {
+         existing.participants.push(p);
+       } else {
+         const virtGroup = groupMap.get(p.courseStartDate) || {
+            id: 'virt-active-' + p.courseStartDate,
+            courseStartDate: p.courseStartDate,
+            courseEndDate: p.courseEndDate,
+            status: 'active',
+            groupNumber: null,
+            isLocked: false,
+            createdAt: '',
+            updatedAt: ''
+         } as Group;
+         
+         grouped.set(p.courseStartDate, { group: virtGroup, participants: [p] });
+       }
     });
     
-    // Sort by group number ascending (earliest first)
+    return Array.from(grouped.values()).sort((a,b) => a.group.courseStartDate.localeCompare(b.group.courseStartDate));
+  }, [participantsByStatus.active, groups, groupMap]);
+
+  // Group planned participants by courseStartDate
+  const plannedGroupedByDate = useMemo(() => {
+    const grouped = new Map<string, { group: Group; participants: Participant[] }>();
+    
+    // 1. Initialize with specific PLANNED groups from DB
+    if (groups) {
+      groups.forEach(g => {
+        if (g.status === 'planned') {
+          grouped.set(g.courseStartDate, { group: g, participants: [] });
+        }
+      });
+    }
+
+    // 2. Distribute participants
+    participantsByStatus.planned.forEach(p => {
+      let group = groupMap.get(p.courseStartDate);
+      
+      if (!group) {
+         if (!grouped.has(p.courseStartDate)) {
+             const virtualGroup = {
+                id: 'virtual-planned-' + p.courseStartDate,
+                groupNumber: null,
+                courseStartDate: p.courseStartDate,
+                courseEndDate: p.courseEndDate,
+                status: 'planned',
+                isLocked: false,
+                createdAt: '',
+                updatedAt: ''
+             } as Group;
+             grouped.set(p.courseStartDate, { group: virtualGroup, participants: [] });
+         }
+      }
+
+      if (grouped.has(p.courseStartDate)) {
+        grouped.get(p.courseStartDate)!.participants.push(p);
+      }
+    });
+
+    // Sort by courseStartDate ascending
     return Array.from(grouped.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([groupNumber, data]) => ({
-        groupNumber,
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(0, 2)
+      .map(([courseStartDate, data]) => ({
+        courseStartDate,
         ...data
       }));
-  }, [participantsByStatus.planned, groupMap]);
+  }, [participantsByStatus.planned, groupMap, groups]);
 
-  // Group completed participants by group for accordion display
-  const completedGroupedByNumber = useMemo(() => {
-    const grouped = new Map<number, { group: any; participants: Participant[] }>();
+  // Group completed participants by courseStartDate
+  const completedGroupedByDate = useMemo(() => {
+    const grouped = new Map<string, { group: Group; participants: Participant[] }>();
     
     participantsByStatus.completed.forEach(p => {
-      const group = groupMap.get(p.groupNumber);
+      const group = groupMap.get(p.courseStartDate);
       if (!group) return;
       
-      if (!grouped.has(p.groupNumber)) {
-        grouped.set(p.groupNumber, { group, participants: [] });
+      if (!grouped.has(p.courseStartDate)) {
+        grouped.set(p.courseStartDate, { group, participants: [] });
       }
-      grouped.get(p.groupNumber)!.participants.push(p);
+      grouped.get(p.courseStartDate)!.participants.push(p);
     });
     
-    // Sort by group number descending (newest first)
+    // Sort by courseStartDate descending
     return Array.from(grouped.entries())
-      .sort(([a], [b]) => b - a)
-      .map(([groupNumber, data]) => ({
-        groupNumber,
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([courseStartDate, data]) => ({
+        courseStartDate,
         ...data
       }));
   }, [participantsByStatus.completed, groupMap]);
 
-  // Get unique group numbers for each status
+  // Get unique periods for each status
   const groupStats = useMemo(() => {
-    const activeGroups = new Set<number>();
-    const plannedGroups = new Set<number>();
-    const completedGroups = new Set<number>();
+    const activePeriods = new Set<string>(); // Count periods, not group numbers
+    const plannedPeriods = new Set<string>();
+    const completedPeriods = new Set<string>();
+    
+    // Use grouped calculated data to count
+    activeGroupedByDate.forEach(g => activePeriods.add(g.group.courseStartDate));
 
-    participantsByStatus.active.forEach(p => activeGroups.add(p.groupNumber));
-    participantsByStatus.planned.forEach(p => plannedGroups.add(p.groupNumber));
-    participantsByStatus.completed.forEach(p => completedGroups.add(p.groupNumber));
+    // For planned, we might want total count of all planned groups available?
+    // The previous logic counted distinct group numbers of participants.
+    // Let's count periods from groups + participants.
+    // Actually, stick to simple distinct periods from participants + groups logic.
+    if (groups) {
+        groups.forEach(g => {
+            if (g.status === 'active') activePeriods.add(g.courseStartDate);
+            if (g.status === 'planned') plannedPeriods.add(g.courseStartDate);
+            if (g.status === 'completed') completedPeriods.add(g.courseStartDate);
+        });
+    }
+    // Also add from orphans
+    participantsByStatus.active.forEach(p => activePeriods.add(p.courseStartDate));
+    participantsByStatus.planned.forEach(p => plannedPeriods.add(p.courseStartDate));
+    participantsByStatus.completed.forEach(p => completedPeriods.add(p.courseStartDate));
 
     return {
-      active: {
-        count: activeGroups.size,
-        numbers: Array.from(activeGroups).sort((a, b) => a - b)
-      },
-      planned: {
-        count: plannedGroups.size,
-        numbers: Array.from(plannedGroups).sort((a, b) => a - b)
-      },
-      completed: {
-        count: completedGroups.size,
-        numbers: Array.from(completedGroups).sort((a, b) => a - b)
-      }
+      active: { count: activePeriods.size, numbers: [] }, // numbers field is legacy for GroupSection, we pass explicitly now
+      planned: { count: plannedPeriods.size, numbers: [] },
+      completed: { count: completedPeriods.size, numbers: [] }
     };
-  }, [participantsByStatus]);
-
-  // Auto-expand sections when search/filter results are present
-  const prevParticipantsRef = useRef(participants);
-  useEffect(() => {
-    if (prevParticipantsRef.current !== participants && hasActiveFilters) {
-      if (participantsByStatus.active.length > 0 && collapsedSections.active) {
-        expandSection('active');
-      }
-      if (participantsByStatus.planned.length > 0 && collapsedSections.planned) {
-        expandSection('planned');
-      }
-      if (participantsByStatus.completed.length > 0 && collapsedSections.completed) {
-        expandSection('completed');
-      }
-      prevParticipantsRef.current = participants;
-    }
-  }, [participants, participantsByStatus, collapsedSections, expandSection, hasActiveFilters]);
+  }, [participantsByStatus, groups, activeGroupedByDate]);
 
   // Sync group dates with participants on mount
   useEffect(() => {
     const syncAllGroups = async () => {
-      if (!groups) return;
-      for (const group of groups) {
-        await syncGroupDates(group.groupNumber);
-      }
+      // Use the new syncGroups function which handles everything
+      const { syncGroups } = await import('../utils/groupUtils');
+      await syncGroups();
     };
     syncAllGroups();
-  }, [groups]);
+  }, []);
 
   // Only show visible (non-collapsed) participants for bulk actions
   const visibleParticipants = useMemo(() => {
@@ -222,9 +301,14 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
 
   const handleCheckboxChange = async (participant: Participant, field: 'sent' | 'documents' | 'handedOver' | 'paid') => {
     // Check if group is read-only
-    const group = groupMap.get(participant.groupNumber);
+    const group = groupMap.get(participant.courseStartDate);
     if (isGroupReadOnly(group)) {
-      alert(t('lock.lockedInfo'));
+      setAlertModal({
+        isOpen: true,
+        title: t('common.info'),
+        message: t('lock.lockedInfo'),
+        variant: 'info'
+      });
       return;
     }
 
@@ -234,15 +318,25 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       });
     } catch (error) {
       console.error('Error updating participant:', error);
-      alert('Failed to update participant');
+      setAlertModal({
+        isOpen: true,
+        title: t('common.error'),
+        message: 'Failed to update participant',
+        variant: 'error'
+      });
     }
   };
 
   const handleCompletedToggle = async (participant: Participant) => {
     // Check if group is read-only
-    const group = groupMap.get(participant.groupNumber);
+    const group = groupMap.get(participant.courseStartDate);
     if (isGroupReadOnly(group)) {
-      alert(t('lock.lockedInfo'));
+      setAlertModal({
+        isOpen: true,
+        title: t('common.info'),
+        message: t('lock.lockedInfo'),
+        variant: 'info'
+      });
       return;
     }
 
@@ -256,23 +350,40 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       });
     } catch (error) {
       console.error('Error updating completed status:', error);
-      alert('Failed to update completed status');
+      setAlertModal({
+        isOpen: true,
+        title: t('common.error'),
+        message: 'Failed to update completed status',
+        variant: 'error'
+      });
     }
   };
 
   const handleResetCompleted = async (participant: Participant) => {
     // Check if group is read-only
-    const group = groupMap.get(participant.groupNumber);
+    const group = groupMap.get(participant.courseStartDate);
     if (isGroupReadOnly(group)) {
-      alert(t('lock.lockedInfo'));
+      setAlertModal({
+        isOpen: true,
+        title: t('common.info'),
+        message: t('lock.lockedInfo'),
+        variant: 'info'
+      });
       return;
     }
 
     try {
-      await resetCompletedOverride(participant.id);
+      await updateParticipant(participant.id, {
+        completedOverride: null
+      });
     } catch (error) {
       console.error('Error resetting completed status:', error);
-      alert('Failed to reset completed status');
+      setAlertModal({
+        isOpen: true,
+        title: t('common.error'),
+        message: 'Failed to reset completed status',
+        variant: 'error'
+      });
     }
   };
 
@@ -292,15 +403,36 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
 
   const handleGenerateCertificate = async (participant: Participant) => {
     try {
-      const group = groupMap.get(participant.groupNumber);
+      let group = groupMap.get(participant.courseStartDate);
+      
+      // Fallback virtual group if missing (same logic as ParticipantCardList)
       if (!group) {
-        alert('Грешка: Групата не е намерена');
-        return;
+         group = {
+            id: 'virtual-cert',
+            groupNumber: null,
+            courseStartDate: participant.courseStartDate,
+            courseEndDate: participant.courseEndDate,
+            status: 'planned',
+            isLocked: false,
+            createdAt: '',
+            updatedAt: ''
+         } as Group;
       }
+
       await generateCertificate(participant, group);
-      alert('Сертификатът е генериран успешно!');
+      setAlertModal({
+        isOpen: true,
+        title: t('common.success'),
+        message: 'Сертификатът е генериран успешно!',
+        variant: 'success'
+      });
     } catch (error) {
-      alert('Грешка при генериране на сертификат: ' + (error as Error).message);
+      setAlertModal({
+        isOpen: true,
+        title: t('common.error'),
+        message: 'Грешка при генериране на сертификат: ' + (error as Error).message,
+        variant: 'error'
+      });
     }
   };
 
@@ -313,7 +445,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
 
   // Render a participant row - extracted for reusability
   const renderParticipantRow = (participant: Participant) => {
-    const group = groupMap.get(participant.groupNumber);
+    const group = groupMap.get(participant.courseStartDate);
     const isReadOnly = isParticipantReadOnly(participant);
     const rowClassName = [
       'hover:bg-slate-100 transition-colors duration-150',
@@ -344,7 +476,11 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
           </div>
         </td>
         <td className="px-3 py-3 text-sm text-slate-900">
-          <div className="max-w-xs truncate" title={participant.personName}>
+          <div 
+            className="max-w-xs truncate cursor-help" 
+            onMouseEnter={(e) => handleNameMouseEnter(e, participant)}
+            onMouseLeave={handleNameMouseLeave}
+          >
             {participant.personName}
           </div>
         </td>
@@ -353,7 +489,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
         <td className="px-3 py-3 text-sm text-slate-600">{formatDateBG(participant.courseEndDate)}</td>
         <td className="px-3 py-3 text-sm">
           <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded inline-block text-slate-700" title="Уникален номер на удостоверение">
-            {participant.uniqueNumber}
+            {participant.uniqueNumber || "---"}
           </span>
         </td>
         <td className="px-3 py-3 text-center">
@@ -485,16 +621,18 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
           <CompanyBadge companyName={participant.companyName} />
         </td>
         <td className="px-3 py-3 text-sm text-slate-900">
-          <div className="max-w-xs truncate" title={participant.personName}>
+          <div 
+            className="max-w-xs truncate cursor-help"
+            onMouseEnter={(e) => handleNameMouseEnter(e, participant)}
+            onMouseLeave={handleNameMouseLeave}
+          >
             {participant.personName}
           </div>
         </td>
         <td className="px-3 py-3 text-sm text-slate-600">{formatDateBG(participant.medicalDate)}</td>
         <td className="px-3 py-3 text-sm text-slate-600">{formatDateBG(participant.courseStartDate)}</td>
         <td className="px-3 py-3 text-sm text-slate-600">{formatDateBG(participant.courseEndDate)}</td>
-        <td className="px-3 py-3 text-sm">
-          <span className="text-slate-900 font-semibold">{participant.groupNumber}</span>
-        </td>
+
         {/* Unique Number, Sent, HandedOver, Completed hidden for planned groups */}
         <td className="px-3 py-3 text-center">
           <input
@@ -555,7 +693,15 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
         <td className="px-3 py-2 text-sm text-slate-900">
           <CompanyBadge companyName={participant.companyName} />
         </td>
-        <td className="px-3 py-2 text-sm text-slate-900">{participant.personName}</td>
+        <td className="px-3 py-2 text-sm text-slate-900">
+          <div 
+            className="cursor-help"
+            onMouseEnter={(e) => handleNameMouseEnter(e, participant)}
+            onMouseLeave={handleNameMouseLeave}
+          >
+            {participant.personName}
+          </div>
+        </td>
         <td className="px-3 py-2 text-sm">
           <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded inline-block text-slate-700" title="Уникален номер на удостоверение">
             {participant.uniqueNumber}
@@ -641,7 +787,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   };
 
   const isParticipantReadOnly = (participant: Participant): boolean => {
-    const group = groupMap.get(participant.groupNumber);
+    const group = groupMap.get(participant.courseStartDate);
     return isGroupReadOnly(group);
   };
 
@@ -661,102 +807,148 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
         onClearSelection={handleClearSelection}
         onActionComplete={handleBulkActionComplete}
       />
+
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        variant={alertModal.variant}
+      />
       
       {/* Group Sections */}
       <div className="space-y-4">
         {/* Active Groups Section */}
-        {participantsByStatus.active.length > 0 && (
-          <GroupSection
-            title={t('groups.activeSection')}
-            count={groupStats.active.count}
-            groupNumbers={groupStats.active.numbers}
-            dateRange={activeGroup ? `${formatDateBG(activeGroup.courseStartDate)} - ${formatDateBG(activeGroup.courseEndDate)}` : undefined}
-            participantCount={participantsByStatus.active.length}
-            isCollapsed={collapsedSections.active}
-            onToggle={() => toggleSection('active')}
-            variant="active"
-          >
-            <div className="overflow-x-auto max-h-[400px] overflow-y-auto relative">
-              <table className="min-w-full bg-white border border-slate-200">
-                <thead className="bg-slate-100 sticky top-0 z-10 shadow-sm">
-                  <tr>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 border-b border-slate-200 w-12">
-                      <input
-                        type="checkbox"
-                        checked={!collapsedSections.active && selectedIds.size > 0 && visibleParticipants.filter(p => !isParticipantReadOnly(p)).every(p => selectedIds.has(p.id))}
-                        onChange={handleSelectAll}
-                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-300 cursor-pointer"
-                        aria-label="Select all visible participants"
-                      />
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('participant.companyName')}
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('participant.personName')}
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('participant.medicalDate')}
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('participant.courseStart')}
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('participant.courseEnd')}
-                    </th>
-                    <th 
-                      className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors duration-150"
-                      onClick={() => handleSort('uniqueNumber')}
-                    >
-                      {t('participant.uniqueNumber')} {sortBy === 'uniqueNumber' && (sortDirection === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('participant.sent')}
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('participant.documents')}
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('participant.handedOver')}
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('participant.paid')}
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('participant.completed')}
-                    </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                      {t('common.delete')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {participantsByStatus.active.map(renderParticipantRow)}
-                </tbody>
-              </table>
+        <GroupSection
+          title={t('groups.activeSection')}
+          count={groupStats.active.count}
+          groupNumbers={activeGroupedByDate.length <= 1 ? activeGroupNumber : []}
+          dateRange={activeGroupedByDate.length <= 1 ? activeDateRange : undefined}
+          participantCount={participantsByStatus.active.length}
+          isCollapsed={collapsedSections.active}
+          onToggle={() => toggleSection('active')}
+          variant="active"
+        >
+          {activeGroupedByDate.length === 0 ? (
+             <div className="text-center py-8 text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+               {t('participants.noActive')}
+             </div>
+          ) : (
+            <div className="space-y-8">
+              {activeGroupedByDate.map((data, idx) => (
+                <div key={data.group.courseStartDate} className="space-y-3">
+                  {/* Sub-header for multiple active groups */}
+                  {activeGroupedByDate.length > 1 && (
+                    <div className="flex items-center gap-2 pb-2 border-b border-blue-100">
+                       <span className="font-bold text-blue-900">
+                          {formatDateBG(data.group.courseStartDate)} - {formatDateBG(data.group.courseEndDate)}
+                       </span>
+                       {data.group.groupNumber && (
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-bold">
+                             № {data.group.groupNumber}
+                          </span>
+                       )}
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto max-h-[400px] overflow-y-auto relative rounded-lg border border-slate-200">
+                    <table className="min-w-full bg-white">
+                      <thead className="bg-slate-100 sticky top-0 z-10 shadow-sm">
+                        <tr>
+                          <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 border-b border-slate-200 w-12">
+                            <input
+                              type="checkbox"
+                              checked={data.participants.length > 0 && data.participants.every(p => selectedIds.has(p.id))}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedIds);
+                                if (e.target.checked) {
+                                  data.participants.filter(p => !isParticipantReadOnly(p)).forEach(p => newSelected.add(p.id));
+                                } else {
+                                  data.participants.forEach(p => newSelected.delete(p.id));
+                                }
+                                setSelectedIds(newSelected);
+                              }}
+                              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-300 cursor-pointer"
+                            />
+                          </th>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('participant.companyName')}
+                          </th>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('participant.personName')}
+                          </th>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('participant.medicalDate')}
+                          </th>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('participant.courseStart')}
+                          </th>
+                          <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('participant.courseEnd')}
+                          </th>
+                          <th 
+                            className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors duration-150"
+                            onClick={() => handleSort('uniqueNumber')}
+                          >
+                            {t('participant.uniqueNumber')} {sortBy === 'uniqueNumber' && (sortDirection === 'asc' ? '↑' : '↓')}
+                          </th>
+                          <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('participant.sent')}
+                          </th>
+                          <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('participant.documents')}
+                          </th>
+                          <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('participant.handedOver')}
+                          </th>
+                          <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('participant.paid')}
+                          </th>
+                          <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('participant.completed')}
+                          </th>
+                          <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                            {t('common.delete')}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {data.participants.length > 0 ? (
+                           data.participants.map(renderParticipantRow)
+                        ) : (
+                           <tr>
+                              <td colSpan={13} className="text-center py-8 text-slate-400 italic">
+                                 {t("participants.noParticipantsInGroup")}
+                              </td>
+                           </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
             </div>
-          </GroupSection>
-        )}
+          )}
+        </GroupSection>
 
         {/* Planned Groups Section */}
-        {participantsByStatus.planned.length > 0 && (
+        {plannedGroupedByDate.length > 0 && (
           <GroupSection
             title={t('groups.plannedSection')}
             count={groupStats.planned.count}
-            groupNumbers={groupStats.planned.numbers}
+            groupNumbers={[]}
             isCollapsed={collapsedSections.planned}
             onToggle={() => toggleSection('planned')}
             variant="planned"
           >
-            <div className="space-y-3">
-              {plannedGroupedByNumber.map(({ groupNumber, group, participants }) => (
-                <div key={groupNumber} className="bg-white border border-amber-200 rounded-lg overflow-hidden">
+            <div className="space-y-6">
+              {plannedGroupedByDate.map(({ courseStartDate, group, participants }) => (
+                <div key={courseStartDate} className="bg-white border border-amber-200 rounded-lg overflow-hidden">
                   {/* Group Header */}
                   <div className="bg-amber-50 px-4 py-2 border-b border-amber-200">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-amber-900">Група {groupNumber}</span>
-                        <span className="text-sm text-amber-700">
+                        <span className="font-semibold text-amber-900">
                           {formatDateBG(group.courseStartDate)} - {formatDateBG(group.courseEndDate)}
                         </span>
                       </div>
@@ -774,7 +966,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                           <th className="px-3 py-2 text-center text-xs font-semibold text-slate-700 border-b border-slate-200 w-12">
                             <input
                               type="checkbox"
-                              checked={participants.every(p => selectedIds.has(p.id))}
+                              checked={participants.length > 0 && participants.every(p => selectedIds.has(p.id))}
                               onChange={(e) => {
                                 const newSelected = new Set(selectedIds);
                                 if (e.target.checked) {
@@ -785,7 +977,6 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                                 setSelectedIds(newSelected);
                               }}
                               className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-300 cursor-pointer"
-                              aria-label={`Select all in group ${groupNumber}`}
                             />
                           </th>
                           <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
@@ -803,10 +994,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                           <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
                             {t('participant.courseEnd')}
                           </th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                            {t('participant.group')}
-                          </th>
-                          {/* Hidden for planned groups: Unique Number, Sent, HandedOver, Completed */}
+
                           <th className="px-3 py-2 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
                             {t('participant.documents')}
                           </th>
@@ -819,7 +1007,15 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
-                        {participants.map(renderPlannedParticipantRow)}
+                        {participants.length > 0 ? (
+                           participants.map(renderPlannedParticipantRow)
+                        ) : (
+                           <tr>
+                              <td colSpan={10} className="text-center py-4 text-slate-400 italic">
+                                 {t("participants.noParticipantsInGroup")}
+                              </td>
+                           </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -829,25 +1025,27 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
           </GroupSection>
         )}
 
-        {/* Completed Groups Section (Archive) */}
-        {participantsByStatus.completed.length > 0 && (
+        {/* Completed Groups Section */}
+        {completedGroupedByDate.length > 0 && (
           <GroupSection
             title={t('groups.completedSection')}
             count={groupStats.completed.count}
+            groupNumbers={groupStats.completed.numbers} /* numbers legacy prop, optional */
             isCollapsed={collapsedSections.completed}
             onToggle={() => toggleSection('completed')}
             variant="completed"
           >
-            <div className="space-y-2">
-              {completedGroupedByNumber.map(({ groupNumber, group, participants }) => (
-                <ArchivedGroupAccordion
-                  key={groupNumber}
-                  groupNumber={groupNumber}
-                  courseStartDate={group.courseStartDate}
-                  courseEndDate={group.courseEndDate}
-                  participants={participants}
-                  renderParticipantRow={renderArchivedParticipantRow}
-                />
+            <div className="space-y-4">
+              {completedGroupedByDate.map(({ courseStartDate, group, participants }) => (
+                <div key={courseStartDate}>
+                  <ArchivedGroupAccordion
+                    groupNumber={group.groupNumber || 0}
+                    courseStartDate={group.courseStartDate}
+                    courseEndDate={group.courseEndDate}
+                    participants={participants}
+                    renderParticipantRow={renderArchivedParticipantRow}
+                  />
+                </div>
               ))}
             </div>
           </GroupSection>
@@ -865,6 +1063,37 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
         cancelText={t('common.cancel')}
         variant="danger"
       />
+      
+      {/* Participant Detail Tooltip */}
+      {tooltip && (
+        <div 
+          className="fixed z-50 bg-slate-800 text-white text-xs p-3 rounded shadow-lg pointer-events-none transform -translate-y-full filter drop-shadow-md"
+          style={{ 
+            left: tooltip.x, 
+            top: tooltip.y,
+            minWidth: '220px'
+          }}
+        >
+          <div className="font-bold mb-2 border-b border-slate-600 pb-1 text-slate-100">
+            {tooltip.participant.personName}
+          </div>
+          <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+            <span className="text-slate-400 text-right">{t('participant.egn')}:</span>
+            <span className="font-mono">{tooltip.participant.egn || '-'}</span>
+            
+            <span className="text-slate-400 text-right">{t('participant.birthPlace')}:</span>
+            <span>{tooltip.participant.birthPlace || '-'}</span>
+
+            <span className="text-slate-400 text-right">{t('participant.added')}:</span>
+            <span>{tooltip.participant.createdAt ? formatDateBG(tooltip.participant.createdAt) : '-'}</span>
+            
+            <span className="text-slate-400 text-right">{t('participant.modified')}:</span>
+            <span>{tooltip.participant.updatedAt ? formatDateBG(tooltip.participant.updatedAt) : '-'}</span>
+          </div>
+        </div>
+      )}
     </>
   );
 };
+
+export default ParticipantList;

@@ -22,6 +22,33 @@ export const ArchivedGroupAccordion: React.FC<ArchivedGroupAccordionProps> = ({
 }) => {
   const { t } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ 
+    key: 'uniqueNumber' | null; 
+    direction: 'asc' | 'desc' 
+  }>({ key: 'uniqueNumber', direction: 'desc' });
+
+  const handleSort = (key: 'uniqueNumber') => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedParticipants = React.useMemo(() => {
+    if (!sortConfig.key) return participants;
+
+    return [...participants].sort((a, b) => {
+      if (sortConfig.key === 'uniqueNumber') {
+        const valA = a.uniqueNumber || '';
+        const valB = b.uniqueNumber || '';
+        return sortConfig.direction === 'asc' 
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      }
+      return 0;
+    });
+  }, [participants, sortConfig]);
 
   return (
     <div className="border border-slate-300 rounded-lg mb-2 bg-white shadow-sm transition-shadow duration-150">
@@ -81,8 +108,19 @@ export const ArchivedGroupAccordion: React.FC<ArchivedGroupAccordionProps> = ({
                       <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
                         {t('participant.personName')}
                       </th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                        {t('participant.uniqueNumber')}
+                      <th 
+                        className="px-3 py-2 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                        onClick={() => handleSort('uniqueNumber')}
+                        title="Sort by Number"
+                      >
+                        <div className="flex items-center gap-1">
+                          {t('participant.uniqueNumber')}
+                          {sortConfig.key === 'uniqueNumber' && (
+                            <span className="text-slate-500">
+                              {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                            </span>
+                          )}
+                        </div>
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
                         {t('participant.medicalDate')}
@@ -105,13 +143,13 @@ export const ArchivedGroupAccordion: React.FC<ArchivedGroupAccordionProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {participants.map(renderParticipantRow)}
+                    {sortedParticipants.map(renderParticipantRow)}
                   </tbody>
                 </table>
               </div>
             ) : (
               <div className="p-3 space-y-2">
-                {participants.map(renderParticipantRow)}
+                {sortedParticipants.map(renderParticipantRow)}
               </div>
             )}
           </div>

@@ -11,6 +11,7 @@ import { BulkActionBar } from "./ui/BulkActionBar";
 import { GroupSection } from "./ui/GroupSection";
 import { ArchivedGroupAccordion } from "./ui/ArchivedGroupAccordion";
 import { formatDateBG } from "../utils/medicalValidation";
+import { AlertModal } from "./ui/AlertModal";
 import { generateCertificate } from "../utils/certificateGenerator";
 import { useLiveQuery } from "dexie-react-hooks";
 
@@ -176,6 +177,44 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
   const activeGroupNumber = activeGroup?.groupNumber ? [activeGroup.groupNumber] : [];
   const activeDateRange = activeGroup ? `${formatDateBG(activeGroup.courseStartDate)} - ${formatDateBG(activeGroup.courseEndDate)}` : undefined;
 
+  // Group Active participants by courseStartDate (handle multiple active groups edge case)
+  const activeGroupedByDate = useMemo(() => {
+    const grouped = new Map<string, { group: Group; participants: Participant[] }>();
+    
+    // 1. Find all active groups
+    groups?.forEach(g => {
+      if (g.status === 'active') {
+        grouped.set(g.courseStartDate, { group: g, participants: [] });
+      }
+    });
+
+    // 2. Distribute participants
+    participantsByStatus.active.forEach(p => {
+       const existing = grouped.get(p.courseStartDate);
+       if (existing) {
+         existing.participants.push(p);
+       } else {
+         // Create virtual active group if missing from DB references but status logic said active
+         // (Should be rare)
+         const virtGroup = groupMap.get(p.courseStartDate) || {
+            id: 'virt-active-' + p.courseStartDate,
+            courseStartDate: p.courseStartDate,
+            courseEndDate: p.courseEndDate,
+            status: 'active',
+            groupNumber: null,
+            isLocked: false,
+            createdAt: '',
+            updatedAt: ''
+         } as Group;
+         
+         grouped.set(p.courseStartDate, { group: virtGroup, participants: [p] });
+       }
+    });
+    
+    // Sort by date
+    return Array.from(grouped.values()).sort((a,b) => a.group.courseStartDate.localeCompare(b.group.courseStartDate));
+  }, [participantsByStatus.active, groups, groupMap]);
+
   // Get unique periods for each status
   const groupStats = useMemo(() => {
     const activePeriods = new Set<string>();
@@ -328,6 +367,18 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     setDeleteConfirm({ isOpen: false, participant: undefined });
   };
 
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: 'success' | 'error' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'info'
+  });
+
   const handleGenerateCertificate = async (participant: Participant) => {
     try {
       let group = groupMap.get(participant.courseStartDate);
@@ -347,9 +398,19 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
       }
       
       await generateCertificate(participant, group);
-      alert('Сертификатът е генериран успешно!');
+      setAlertModal({
+        isOpen: true,
+        title: t('common.success'),
+        message: 'Сертификатът е генериран успешно!', // Using hardcoded BG string as in original, or should I translate? 'Certificate generated successfully'
+        variant: 'success'
+      });
     } catch (error) {
-      alert('Грешка при генериране на сертификат: ' + (error as Error).message);
+      setAlertModal({
+        isOpen: true,
+        title: t('common.error'),
+        message: 'Грешка при генериране на сертификат: ' + (error as Error).message,
+        variant: 'error'
+      });
     }
   };
 
@@ -373,12 +434,15 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             : "border-slate-200"
         } ${isLocked ? "opacity-75" : "cursor-pointer hover:shadow-md"}`}
       >
-        {/* Header with Kebab Menu */}
+        {/* Header with Name, Badge and Kebab Menu */}
         <div className="flex justify-between items-start mb-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="flex-1 min-w-0">
+            <div className="mb-1">
+              <CompanyBadge companyName={participant.companyName} />
+            </div>
+            <div className="flex items-center gap-2">
               {isSelected && (
-                <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center">
+                <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center shrink-0">
                   <svg
                     className="w-3 h-3 text-white"
                     fill="none"
@@ -394,27 +458,26 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                   </svg>
                 </div>
               )}
-              <h3 className="font-bold text-lg text-slate-900">
+              <h3 className="font-bold text-lg text-slate-900 leading-tight truncate">
                 {participant.personName}
               </h3>
               {isLocked && (
                 <span
-                  className="text-xs text-slate-500"
+                  className="text-xs text-slate-500 shrink-0"
                   title={t("lock.lockedInfo")}
                 >
                   🔒
                 </span>
               )}
             </div>
-            <div className="mt-1">
-              <CompanyBadge companyName={participant.companyName} />
-            </div>
           </div>
           <div className="flex items-center gap-2">
             <div className="flex flex-col gap-1 items-end">
-              <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-700">
-                {participant.uniqueNumber}
-              </span>
+              {participant.uniqueNumber && (
+                <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-700">
+                  {participant.uniqueNumber}
+                </span>
+              )}
               <div className="flex gap-1">
                 <Badge
                   label={
@@ -439,7 +502,9 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             {!isLocked && (
               <KebabMenu
                 onEdit={() => onEdit(participant)}
-                onGenerate={() => handleGenerateCertificate(participant)}
+                onGenerate={groupMap.get(participant.courseStartDate)?.status === 'active' 
+                  ? () => handleGenerateCertificate(participant) 
+                  : undefined}
                 onDelete={() => handleDeleteClick(participant)}
               />
             )}
@@ -550,15 +615,19 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         className="bg-white rounded-lg p-3 border border-slate-200"
       >
         <div className="flex justify-between items-start mb-2">
-          <div>
-            <h4 className="font-semibold text-slate-900">
+          <div className="flex-1 min-w-0 pr-2">
+            <div className="mb-1">
+              <CompanyBadge companyName={participant.companyName} />
+            </div>
+            <h4 className="font-semibold text-slate-900 truncate">
               {participant.personName}
             </h4>
-            <CompanyBadge companyName={participant.companyName} />
           </div>
-          <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-700">
-            {participant.uniqueNumber}
-          </span>
+          {participant.uniqueNumber && (
+            <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-700">
+              {participant.uniqueNumber}
+            </span>
+          )}
         </div>
 
         <div className="text-sm text-slate-600 mb-2">
@@ -635,27 +704,63 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         onActionComplete={handleBulkActionComplete}
       />
 
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        variant={alertModal.variant === 'error' ? 'danger' : alertModal.variant}
+      />
+
       {/* Group Sections */}
       <div className="space-y-4 pb-32">
         {/* Active Groups Section - ALWAYS VISIBLE */}
         <GroupSection
           title={t("groups.activeSection")}
           count={groupStats.active.count}
-          groupNumbers={activeGroupNumber}
-          dateRange={activeDateRange}
+          groupNumbers={activeGroupedByDate.length <= 1 && activeGroupNumber.length > 0 ? activeGroupNumber : []}
+          dateRange={activeGroupedByDate.length <= 1 ? activeDateRange : undefined}
           isCollapsed={collapsedSections.active}
           onToggle={() => toggleSection("active")}
+          showCount={activeGroupedByDate.length <= 1 ? (Math.max(activeGroupNumber.length, 0) > 0) : true}
           variant="active"
         >
-          {participantsByStatus.active.length > 0 ? (
-            <div className="space-y-4">
-              {participantsByStatus.active.map((p, i) =>
-                renderParticipantCard(p, i)
-              )}
-            </div>
+          {activeGroupedByDate.length === 0 ? (
+             <div className="text-center py-8 text-slate-500 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+               <p>{t("participants.noActive")}</p>
+             </div>
           ) : (
-            <div className="text-center py-8 text-slate-500">
-              Няма участници в активна група
+            <div className="space-y-8">
+              {activeGroupedByDate.map((data) => (
+                <div key={data.group.courseStartDate} className="space-y-4">
+                  {/* Show sub-header only if multiple active groups exists (uncommon/bug state) */}
+                  {activeGroupedByDate.length > 1 && (
+                    <div className="flex items-center gap-2 pb-2 border-b border-blue-100">
+                      <span className="font-semibold text-blue-900">
+                        {formatDateBG(data.group.courseStartDate)} - {formatDateBG(data.group.courseEndDate)}
+                      </span>
+                      {data.group.groupNumber && (
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
+                          № {data.group.groupNumber}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Participants List */}
+                  {data.participants.length > 0 ? (
+                    <div className="space-y-4">
+                      {data.participants.map((p, i) =>
+                        renderParticipantCard(p, i)
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 italic text-slate-400 bg-white/50 rounded border border-dashed border-slate-100">
+                      {t("participants.noParticipantsInGroup")}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </GroupSection>

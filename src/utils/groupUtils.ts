@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db, Group } from '../db/database';
 import { computeCourseDates } from './dateUtils';
-import { formatUniqueNumber } from './uniqueNumberUtils';
+
 
 /**
  * Get the active group (only one can be active at a time)
@@ -14,70 +14,18 @@ export async function getActiveGroup(): Promise<Group | undefined> {
  * Generate unique numbers for all participants in a period/group
  * Used when planned group becomes active
  */
+/**
+ * Generate unique numbers for all participants in a period/group
+ * Used when planned group becomes active
+ * REFACTORED to use strict Global Max logic via assignUniqueNumbersForGroupActivation
+ */
 export async function generateUniqueNumbersForGroup(courseStartDate: string): Promise<void> {
-  // Get all participants in this period that need unique numbers
-  const participants = await db.participants
-    .where('courseStartDate')
-    .equals(courseStartDate)
-    .toArray();
-  
-  const participantsNeedingNumbers = participants.filter(p => !p.uniqueNumber);
-  if (participantsNeedingNumbers.length === 0) return;
-  
-  // Get all existing unique numbers from ALL participants
-  const allParticipants = await db.participants.toArray();
-  const existingNumbersSet = new Set(
-    allParticipants
-      .map(p => p.uniqueNumber)
-      .filter(n => n)
-  );
-  
-  // Generate sequential unique numbers for all participants in batch
-  let prefix = 3531;
-  let seq = 1;
-  const assignedNumbers: { participantId: string; uniqueNumber: string }[] = [];
-  
-  for (const participant of participantsNeedingNumbers) {
-    // Find next available number
-    while (true) {
-      const candidateNumber = formatUniqueNumber(prefix, seq);
-      
-      // Check if not in existing set AND not already assigned in this batch
-      if (!existingNumbersSet.has(candidateNumber) && 
-          !assignedNumbers.some(a => a.uniqueNumber === candidateNumber)) {
-        assignedNumbers.push({
-          participantId: participant.id!,
-          uniqueNumber: candidateNumber
-        });
-        break;
-      }
-      
-      prefix++;
-      seq++;
-      
-      if (prefix > 9999) {
-        throw new Error('Could not generate unique numbers - sequence exhausted');
-      }
-    }
-    
-    prefix++;
-    seq++;
-  }
-  
-  // Update all participants with their new unique numbers
-  for (const assignment of assignedNumbers) {
-    await db.participants.update(assignment.participantId, {
-      uniqueNumber: assignment.uniqueNumber
-    });
-  }
-  
-  // Update settings with the last used prefix/seq
-  if (assignedNumbers.length > 0) {
-    await db.settings.update(1, {
-      lastUniquePrefix: prefix - 1,
-      lastUniqueSeq: seq - 1
-    });
-  }
+  // Find group by date
+  const group = await db.groups.where('courseStartDate').equals(courseStartDate).first();
+  if (!group) return;
+
+  const { assignUniqueNumbersForGroupActivation } = await import('./uniqueNumberUtils');
+  await assignUniqueNumbersForGroupActivation(group.id);
 }
 
 /**
@@ -124,34 +72,101 @@ export async function getPlannedGroups(): Promise<Group[]> {
 }
 
 /**
- * Get suggested group for a courseStartDate
- * Returns active group if it matches AND is not completed, or finds/creates planned group
- * NEVER returns a completed group
+ * Get suggested group for a medicalDate
+ * Smart Logic:
+ * 1. Calculate strict start date (next Monday)
+ * 2. If that group is completed, look for next available (Active/Planned) group
+ * 3. Validate if medical date is still valid for the new candidate group (<= 6 months)
  */
-export async function getSuggestedGroup(courseStartDate: string): Promise<{ group: Group | null; shouldCreate: boolean }> {
-  // Check if active group matches AND is not completed
-  const activeGroup = await getActiveGroup();
-  if (activeGroup && activeGroup.courseStartDate === courseStartDate && activeGroup.status !== 'completed') {
-    return { group: activeGroup, shouldCreate: false };
+/**
+ * Get suggested group for a medicalDate
+ * Strict Logic:
+ * 1. Calculate strict start date (next Monday)
+ * 2. Find group for that date.
+ * 3. If Completed -> Return it (Caller blocks).
+ * 4. If Active/Planned -> Return it.
+ * 5. If None:
+ *    - If date < ActiveGroup.date -> Return "Completed" stub (Block).
+ *    - Else -> Suggest Creation.
+ */
+export async function getSuggestedGroup(medicalDate: string): Promise<{ group: Group | null; shouldCreate: boolean; createsForDate?: string }> {
+  const { computeCourseDates } = await import('./dateUtils');
+  const { isMedicalValidForCourse } = await import('./medicalValidation');
+  
+  // 1. Calculate strict start date
+  const { courseStartDate } = computeCourseDates(medicalDate);
+  
+  // 2. Fetch ALL groups to avoid repeated queries
+  // We need to check strict date, and potentially future dates
+  const allGroups = await db.groups.toArray();
+  const activeGroup = allGroups.find(g => g.status === 'active');
+  const plannedGroups = allGroups.filter(g => g.status === 'planned').sort((a, b) => a.courseStartDate.localeCompare(b.courseStartDate));
+  
+  // Check strict match first
+  const strictMatchGroup = allGroups.find(g => g.courseStartDate === courseStartDate);
+
+  // SCENARIO 1: Strict match exists and is COMPLETED (Archived)
+  // User wants: "If archived, try to assign to first possible active/planned group"
+  if (strictMatchGroup && strictMatchGroup.status === 'completed') {
+       // Only fallback if medical date is still valid for next available group
+       
+       // Candidates: Active Group + All Planned Groups, sorted by date
+       const candidates = [];
+       if (activeGroup) candidates.push(activeGroup);
+       candidates.push(...plannedGroups);
+       // Sort by date to find nearest future one
+       candidates.sort((a, b) => a.courseStartDate.localeCompare(b.courseStartDate));
+       
+       // Find first candidate that starts AFTER the strict date (or is the active one even if date mismatch? active might be future)
+       // Actually, we just need ANY candidate that is valid for this medical date
+       // And strictly, we prefer the 'next' one chronologically to fill gaps.
+       
+       const validCandidate = candidates.find(g => {
+           // Must be chronologically >= strictDate (can't go back in time to an older active group if strict is newer? actually strict is closed, so active MUST be newer)
+           if (g.courseStartDate < courseStartDate) return false; 
+           
+           // Must be medically valid
+           return isMedicalValidForCourse(medicalDate, g.courseStartDate);
+       });
+       
+       if (validCandidate) {
+           return { group: validCandidate, shouldCreate: false };
+       }
+       
+       // If no valid candidate found (e.g. all future groups are too far, or no future groups exist)
+       // We MUST return the Completed group to trigger the BLOCK (Expired/Closed).
+       // We do NOT auto-suggest creating a new group here because that might create a duplicate period or skip logic.
+       // Although... if no planned groups exist, maybe we should suggest creating the next week?
+       // But let's be safe: If strict is closed, and no existing open group fits... BLOCK.
+       return { group: strictMatchGroup, shouldCreate: false };
+  }
+
+  // SCENARIO 2: Strict match exists and is Active/Planned
+  if (strictMatchGroup) {
+      return { group: strictMatchGroup, shouldCreate: false };
   }
   
-  // Check if planned group exists for this date
-  const plannedGroup = await db.groups
-    .where('courseStartDate')
-    .equals(courseStartDate)
-    .and(g => g.status === 'planned')
-    .first();
-    
-  if (plannedGroup) {
-    return { group: plannedGroup, shouldCreate: false };
+  // SCENARIO 3: No group exists for strict date
+  // Is it in the past relative to Active?
+  if (activeGroup && courseStartDate < activeGroup.courseStartDate) {
+      // Past & Empty -> Block as if completed
+      return {
+          group: {
+              id: 'stub_past',
+              status: 'completed',
+              courseStartDate,
+              courseEndDate: '', 
+              groupNumber: -1,
+              createdAt: '',
+              updatedAt: '',
+              isLocked: true
+          } as Group,
+          shouldCreate: false
+      };
   }
   
-  // No suitable group exists - should create planned group
-  // This happens when:
-  // 1. No active group exists
-  // 2. Active group exists but has different date
-  // 3. Active group is completed (archived)
-  return { group: null, shouldCreate: true };
+  // SCENARIO 4: Future date, no group -> Create
+  return { group: null, shouldCreate: true, createsForDate: courseStartDate };
 }
 
 /**
@@ -159,17 +174,28 @@ export async function getSuggestedGroup(courseStartDate: string): Promise<{ grou
  * Planned groups do NOT get groupNumber - it's assigned when activated
  */
 export async function createGroup(courseStartDate: string, status: 'active' | 'planned' = 'planned'): Promise<Group> {
+  // CRITICAL: Check if group exists for this date regardless of status
+  // A period must be UNIQUE.
+  const existingGroup = await db.groups.where('courseStartDate').equals(courseStartDate).first();
+  if (existingGroup) {
+    if (existingGroup.status !== status && status === 'active') {
+       // Only allow status upgrade if requested (e.g. planned -> active)
+       // But normally this function is used for creation.
+       // We should return the existing one to be safe and avoid duplicates.
+       console.warn(`Group for ${courseStartDate} already exists with status ${existingGroup.status}. Returning existing.`);
+       return existingGroup;
+    }
+    return existingGroup;
+  }
+
   let groupNumber: number | null = null;
   
   // Only assign groupNumber for active groups
   // Planned groups get null (assigned when activated)
   if (status === 'active') {
-    const allGroups = await db.groups.toArray();
-    const existingNumbers = allGroups
-      .map(g => g.groupNumber)
-      .filter((n): n is number => n !== null);
-    const maxGroupNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
-    groupNumber = maxGroupNumber + 1;
+    // Active groups generally don't have numbers until closed, but if we wanted to...
+    // Per improved logic: Active groups start with NO number unless restored.
+    groupNumber = null;
   }
   
   const courseEndDate = new Date(courseStartDate);
@@ -204,9 +230,30 @@ export async function closeActiveGroup(): Promise<void> {
   
   const now = new Date().toISOString();
   
+  // Determine group number if not already set (re-closing a restored group keeps its number)
+  let finalGroupNumber = activeGroup.groupNumber;
+  
+  if (finalGroupNumber === null || finalGroupNumber === undefined) {
+    // Calculate new number: Find smallest missing positive integer (Gap) or use max + 1
+    const completedGroups = await db.groups.where('status').equals('completed').toArray();
+    const existingNumbers = new Set(
+      completedGroups
+        .map(g => g.groupNumber)
+        .filter((n): n is number => n !== null && n !== undefined && n > 0)
+    );
+    
+    let candidate = 1;
+    while (existingNumbers.has(candidate)) {
+      candidate++;
+    }
+    finalGroupNumber = candidate;
+    console.log(`Assigning Group Number ${finalGroupNumber} to closed group (Gap filling/Next sequential)`);
+  }
+
   // Mark active group as completed (archived) and locked
   await db.groups.update(activeGroup.id, {
     status: 'completed',
+    groupNumber: finalGroupNumber,
     updatedAt: now,
     closedAt: now,
     isLocked: true
@@ -267,17 +314,7 @@ export async function deleteGroupIfEmpty(groupId: string): Promise<boolean> {
   return false;
 }
 
-/**
- * @deprecated NO LONGER NEEDED - Participants no longer have autoGroup/groupNumber
- * Participants are now identified by courseStartDate only
- * 
- * Recalculate all auto groups and sync with current workflow
- * This maintains sequential group numbers
- */
-export async function recalculateAllAutoGroups(): Promise<number> {
-  // This function is no longer needed but kept for backward compatibility
-  return 0;
-}
+
 
 /**
  * Sync groups table with current participants and maintain workflow states
@@ -292,25 +329,62 @@ export async function recalculateAllAutoGroups(): Promise<number> {
 export async function syncGroups(): Promise<void> {
   const allParticipants = await db.participants.toArray();
   const allGroups = await db.groups.toArray();
-  const now = new Date().toISOString();
-  
-  // 1. Fix Active groups with missing groupNumber
+  // 1. Fix Active groups - REMOVED auto-numbering
+  // But we still need the activeGroup variable for later logic
   const activeGroup = allGroups.find(g => g.status === 'active');
-  if (activeGroup && (activeGroup.groupNumber === null || activeGroup.groupNumber === undefined)) {
-    console.warn(`⚠️ Active Group found without number! Fixing...`);
-    
-    // Calculate new number
-    const existingNumbers = allGroups
-      .map(g => g.groupNumber)
-      .filter((n): n is number => n !== null && n !== undefined);
-    const maxGroupNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
-    const newNumber = maxGroupNumber + 1;
-    
-    await db.groups.update(activeGroup.id, {
-      groupNumber: newNumber,
-      updatedAt: now
-    });
-    console.log(`✅ Fixed Active Group: Assigned number ${newNumber}`);
+
+  // 1.1 Ensure participants in Active groups have unique numbers
+  // This handles cases where a planned group became active 'accidentally' or without triggering number generation
+  const activeGroupsAll = allGroups.filter(g => g.status === 'active');
+  for (const g of activeGroupsAll) {
+      await generateUniqueNumbersForGroup(g.courseStartDate);
+  }
+  
+
+  
+  // 1.2 Sanitize Group Dates (Fix local timezone bugs resulting in Sunday dates)
+  // If any group starts on a non-Monday, shift it to Monday
+  for (const g of allGroups) {
+      const d = new Date(g.courseStartDate);
+      // d is UTC midnight.
+      // But g.courseStartDate string "2026-01-25" (Sunday)
+      // d.getDay() for "2026-01-25" is 0 (Sunday).
+      if (d.getDay() !== 1) {
+          console.warn(`Found invalid group start date ${g.courseStartDate} (Day: ${d.getDay()}). Fixing to Monday.`);
+          // Calculate correct Monday
+          // We can use the logic from dateUtils, assuming strict ISO parsing
+          // But simpler: just add days to get to Monday.
+          // Sunday(0) -> +1
+          // Tuesday(2) -> +6... wait, we usually want "Next Monday" or "Closest"?
+          // For the bug "25.01" (Sunday) which should be "26.01" (Monday), it's +1.
+          // If it was "24.01" (Saturday) -> +2.
+          const day = d.getDay();
+          const add = day === 0 ? 1 : (8 - day);
+          
+          const correctDate = new Date(d);
+          correctDate.setDate(d.getDate() + add);
+          const correctDateStr = correctDate.toISOString().split('T')[0];
+          
+          // Check if target exists to avoid collision? 
+          // If 26.01 already exists, we should probably merge or just delete this one if empty?
+          // But for now, let's just try to update. If collision, update might fail if ID unique? No, ID is primary.
+          // But logic elsewhere relies on unique dates.
+          // Let's just update perfectly. Duplicate resolution logic later in syncGroups (Step 4) handles mergers!
+          await db.groups.update(g.id, {
+             courseStartDate: correctDateStr,
+             // Update End Date too
+             courseEndDate: new Date(correctDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          });
+          
+          // Also update participants!
+          const participantsInGroup = allParticipants.filter(p => p.courseStartDate === g.courseStartDate);
+          for (const p of participantsInGroup) {
+              await db.participants.update(p.id, {
+                  courseStartDate: correctDateStr,
+                  courseEndDate: new Date(correctDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+              });
+          }
+      }
   }
   
   // 2. Identify all required periods
@@ -327,10 +401,10 @@ export async function syncGroups(): Promise<void> {
   } else {
     // Determine next Monday from today
     const today = new Date();
-    // Use dateUtils logic (importing logic manually here to avoid dependency cycle if any)
     const dayOfWeek = today.getDay(); 
     const daysUntilMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : 8 - dayOfWeek);
     baseDate = new Date(today);
+    baseDate.setHours(12, 0, 0, 0); // Safe mid-day time to avoid UTC rollover at midnight
     baseDate.setDate(today.getDate() + daysUntilMonday);
     
     // If today is Monday, strict logic might define if we are "in" this week or "before"
@@ -357,28 +431,94 @@ export async function syncGroups(): Promise<void> {
     }
   }
   
-  // 4. Cleanup ONLY old empty planned groups (not required ones)
-  // Refresh groups list
+  // 4. Cleanup duplicates and old empty groups
+  // REFRESH groups list because we might have added some
   const refreshedGroups = await db.groups.toArray();
   const participantCounts = new Map<string, number>();
   allParticipants.forEach(p => {
     participantCounts.set(p.courseStartDate, (participantCounts.get(p.courseStartDate) || 0) + 1);
   });
 
-  for (const group of refreshedGroups) {
-    // Only cleanup PLANNED groups
-    if (group.status !== 'planned') continue;
+  // Group ALL groups by date to find duplicates (not just planned)
+  const allGroupsByDate = new Map<string, Group[]>();
+  refreshedGroups.forEach(g => {
+    const list = allGroupsByDate.get(g.courseStartDate) || [];
+    list.push(g);
+    allGroupsByDate.set(g.courseStartDate, list);
+  });
+
+  // Process duplicates with MERGE logic
+  for (const [date, groups] of allGroupsByDate) {
+    if (groups.length > 1) {
+      console.warn(`Found ${groups.length} duplicate groups for ${date}. Merging and cleaning up...`);
+      
+      // Determine winner: Completed > Active > Planned
+      const sorted = groups.sort((a, b) => {
+        const score = (g: Group) => {
+          if (g.status === 'completed') return 3;
+          if (g.status === 'active') return 2;
+          return 1;
+        };
+        const sA = score(a);
+        const sB = score(b);
+        if (sA !== sB) return sB - sA; // Higher score first
+        // Same score -> keep existing ID rules or createdAt 
+        return 0; 
+      });
+      
+      const winner = sorted[0];
+      const losers = sorted.slice(1);
+      
+      // MERGE participants from losers to winner
+      for (const loser of losers) {
+        console.warn(`Merging participants from duplicate group ${loser.id} to ${winner.id}`);
+        // Find participants linked to loser (by date - wait, participants link by date string, not ID!)
+        // Since participants link by 'courseStartDate', and both loser/winner have SAME date,
+        // the participants are ALREADY conceptually linked to both.
+        // We just need to delete the loser group objects.
+        // No explicit participant update needed unless we stored groupId (which we don't, we store courseStartDate).
+        
+        // Delete the loser group
+        await db.groups.delete(loser.id);
+      }
+    }
+  }
+  
+  // 5. Enforce Max 2 Planned Groups Rule
+  // "Allow planned=2 rule to be soft if participants exist"
+  // "Drop farthest unused"
+  
+  const finalGroups = await db.groups.toArray();
+  const plannedGroups = finalGroups.filter(g => g.status === 'planned');
+  
+  if (plannedGroups.length > 2) {
+    // We need to prune.
+    // Identify used vs unused.
+    const unusedPlanned = plannedGroups.filter(g => (participantCounts.get(g.courseStartDate) || 0) === 0);
     
-    // Don't delete if it has participants
-    if ((participantCounts.get(group.courseStartDate) || 0) > 0) continue;
+    // Check total count
+    let currentCount = plannedGroups.length;
     
-    // Don't delete if it is one of our required future periods
-    if (requiredPeriods.has(group.courseStartDate)) continue;
+    // Sort unused by date DESC (farthest first)
+    // We prune farthest unused first.
+    unusedPlanned.sort((a, b) => b.courseStartDate.localeCompare(a.courseStartDate));
     
-    // If we are here, it's an empty planned group that is NOT in the immediate future
-    // Safe to delete (e.g. was created for a participant who moved dates, or is old)
-    console.log(`Cleaning up old empty planned group: ${group.courseStartDate}`);
-    await db.groups.delete(group.id);
+    for (const group of unusedPlanned) {
+      if (currentCount <= 2) break; // Reached limit
+      
+      // Verify strictness: "Drop farthest planned"
+      // We are dropping unused ones.
+      // Is there a case where we should keep a farthest unused?
+      // "Planned groups should always be the next future Mondays"
+      // So we prefer keeping T+1, T+2.
+      // If we sort Descending, we drop T+5, T+4... leaving T+1, T+2 last.
+      // This is exactly right.
+      
+      console.log(`Pruning excess empty planned group: ${group.courseStartDate}`);
+      await db.groups.delete(group.id);
+      currentCount--;
+    }
+    // If still > 2, it means we have > 2 USED groups. We keep them (Soft limit).
   }
 }
 
@@ -459,14 +599,7 @@ export async function getCompletedGroups(): Promise<Group[]> {
     .sortBy('groupNumber');
 }
 
-/**
- * Legacy function - replaced by syncGroups
- * @deprecated Use syncGroups instead
- */
-export async function cleanupEmptyGroups(): Promise<number> {
-  await syncGroups();
-  return 0;
-}
+
 
 /**
  * Fix group dates based on participants' medical dates
@@ -567,19 +700,18 @@ export async function activateGroupDirectly(groupId: string, moveCurrentToPlanne
         activatedAt: undefined,
         groupNumber: null // Remove groupNumber when moving back to planned
       });
+      // Clear unique numbers for participants in the group being deactivated
+      const { clearUniqueNumbersForGroup } = await import('./uniqueNumberUtils');
+      await clearUniqueNumbersForGroup(currentActive.courseStartDate);
     }
   }
   
   // Assign groupNumber if this is a planned group being activated
   let groupNumber = group.groupNumber;
   if (group.status === 'planned' && groupNumber === null) {
-    // Get next available groupNumber
-    const allGroups = await db.groups.toArray();
-    const existingNumbers = allGroups
-      .map(g => g.groupNumber)
-      .filter((n): n is number => n !== null);
-    const maxGroupNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
-    groupNumber = maxGroupNumber + 1;
+    // Check if this is a previously completed group being restored (unlikely if status is planned, but for safety)
+    // If truly new/planned, it remains NULL. Number assigned on Close.
+    groupNumber = null;
   }
   
   // Activate the selected group
@@ -591,8 +723,10 @@ export async function activateGroupDirectly(groupId: string, moveCurrentToPlanne
     isLocked: false // Unlock if it was locked (for reopening archived)
   });
   
-  // Generate unique numbers for participants in this period
-  await generateUniqueNumbersForGroup(group.courseStartDate);
+  // PRIMARY TRIGGER: Generate unique numbers for participants in this period
+  // using the strict global sequence logic
+  const { assignUniqueNumbersForGroupActivation } = await import('./uniqueNumberUtils');
+  await assignUniqueNumbersForGroupActivation(groupId);
   
   return { success: true };
 }
@@ -613,6 +747,10 @@ export async function setActiveToPlanned(): Promise<void> {
     updatedAt: now,
     activatedAt: undefined
   });
+  
+  // Clear unique numbers
+  const { clearUniqueNumbersForGroup } = await import('./uniqueNumberUtils');
+  await clearUniqueNumbersForGroup(activeGroup.courseStartDate);
 }
 
 /**

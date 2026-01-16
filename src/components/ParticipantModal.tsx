@@ -56,19 +56,37 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
 
   const activeGroup = useLiveQuery(() => getActiveGroup(), []);
   const allGroups = useLiveQuery(() => db.groups.orderBy('groupNumber').toArray(), []);
-  const [suggestedGroup, setSuggestedGroup] = useState<{ groupNumber: number; courseStartDate: string; courseEndDate: string; status: 'active' | 'planned' | 'completed' } | null>(null);
+  const [suggestedGroup, setSuggestedGroup] = useState<{ groupNumber: number | null; courseStartDate: string; courseEndDate: string; status: 'active' | 'planned' | 'completed' } | null>(null);
 
-  // Calculate suggested group when dates change
+  // Calculate suggested group when medical date changes
   useEffect(() => {
-    if (!computedDates.courseStartDate) {
+    if (!formData.medicalDate) {
       setSuggestedGroup(null);
       return;
     }
     
-    getSuggestedGroup(computedDates.courseStartDate).then(result => {
-      setSuggestedGroup(result.group);
+    getSuggestedGroup(formData.medicalDate).then(result => {
+      // If result.createsForDate is present, it means we are suggesting a new group for that date
+      // We should construct a temporary group object for display if result.group is null
+      if (result.group) {
+        setSuggestedGroup(result.group);
+      } else if (result.createsForDate) {
+        // Create a dummy group object for display purposes
+        const d = new Date(result.createsForDate);
+        const endDate = new Date(d);
+        endDate.setDate(d.getDate() + 7);
+        
+        setSuggestedGroup({
+          groupNumber: null,
+          courseStartDate: result.createsForDate,
+          courseEndDate: endDate.toISOString().split('T')[0],
+          status: 'planned'
+        });
+      } else {
+        setSuggestedGroup(null);
+      }
     });
-  }, [computedDates.courseStartDate]);
+  }, [formData.medicalDate]);
 
   useEffect(() => {
     if (participant) {
@@ -79,8 +97,8 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         birthPlace: participant.birthPlace || '',
         citizenship: participant.citizenship || 'българско',
         medicalDate: participant.medicalDate,
-        groupAssignmentMode: participant.manualGroup ? 'manual' : 'auto',
-        selectedGroupId: participant.manualGroup?.toString() || '',
+        groupAssignmentMode: 'auto',
+        selectedGroupId: '',
         uniqueNumber: participant.uniqueNumber
       });
       setComputedDates({
@@ -138,25 +156,25 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
     const newErrors: Record<string, string> = {};
 
     if (!formData.companyName.trim()) {
-      newErrors.companyName = 'Company name is required';
+      newErrors.companyName = t('modal.companyNameRequired');
     }
 
     if (!formData.personName.trim()) {
-      newErrors.personName = 'Person name is required';
+      newErrors.personName = t('modal.personNameRequired');
     }
 
     if (!formData.egn.trim()) {
-      newErrors.egn = 'ЕГН е задължително';
+      newErrors.egn = t('modal.egnRequired');
     } else if (!/^\d{10}$/.test(formData.egn)) {
-      newErrors.egn = 'ЕГН трябва да е 10 цифри';
+      newErrors.egn = t('modal.egnInvalid');
     }
 
     if (!formData.birthPlace.trim()) {
-      newErrors.birthPlace = 'Месторождение е задължително';
+      newErrors.birthPlace = t('modal.birthPlaceRequired');
     }
 
     if (!formData.medicalDate) {
-      newErrors.medicalDate = 'Medical date is required';
+      newErrors.medicalDate = t('modal.medicalDateRequired');
     } else {
       // Check medical date validity (6-month expiry)
       if (!isMedicalDateValid(formData.medicalDate)) {
@@ -266,9 +284,6 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         birthPlace: formData.birthPlace.trim(),
         citizenship: formData.citizenship.trim() || 'българско',
         medicalDate: formData.medicalDate,
-        groupNumber: formData.groupAssignmentMode === 'manual' && formData.selectedGroupId
-          ? parseInt(formData.selectedGroupId, 10)
-          : undefined,
         uniqueNumber: formData.uniqueNumber.trim() || undefined
       };
 
@@ -294,10 +309,14 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
       onClick={onClose}
     >
+      {/* Safety Buffer Wrapper - catches clicks near the modal */}
       <div 
-        className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-2xl p-8 cursor-default"
         onClick={(e) => e.stopPropagation()}
       >
+        <div 
+          className="bg-white rounded-lg w-full max-h-[85vh] overflow-y-auto shadow-xl"
+        >
         <div className="p-6">
           <h2 className="text-2xl font-bold mb-4">
             {participant ? t('modal.editParticipant') : t('modal.addParticipant')}
@@ -502,23 +521,37 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
                 </div>
 
                 {/* Auto mode info */}
+                {/* Auto mode info */}
                 {formData.groupAssignmentMode === 'auto' && suggestedGroup && (
-                  <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-md">
-                    <p className="text-sm text-emerald-800">
-                      ✓ {t('modal.willBeAssigned')}{' '}
-                      <span className="font-semibold">{t('group.number')} {suggestedGroup.groupNumber}</span>
-                      {' '}({formatDateBG(suggestedGroup.courseStartDate)} - {formatDateBG(suggestedGroup.courseEndDate)})
-                      {' '}
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
-                        suggestedGroup.status === 'active' ? 'bg-blue-100 text-blue-700' :
-                        suggestedGroup.status === 'planned' ? 'bg-slate-100 text-slate-700' :
-                        'bg-emerald-100 text-emerald-700'
-                      }`}>
-                        {suggestedGroup.status === 'active' ? t('modal.active') :
-                         suggestedGroup.status === 'planned' ? t('modal.planned') : t('modal.completed')}
-                      </span>
-                    </p>
-                  </div>
+                  <>
+                  {suggestedGroup.status === 'completed' ? (
+                       <div className="bg-red-50 border border-red-200 p-3 rounded-md">
+                        <p className="text-sm text-red-800 font-medium">
+                          ⛔ Този период вече е приключен.
+                          <br />
+                          <span className="text-xs font-normal mt-1 block">
+                             Не може да добавяте участник към приключила група ({formatDateBG(suggestedGroup.courseStartDate)}).
+                             Моля изберете друга дата за медицинския преглед или активирайте нов период.
+                          </span>
+                        </p>
+                      </div>
+                  ) : (
+                      <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-md">
+                        <p className="text-sm text-emerald-800">
+                          ✓ {t('modal.willBeAssigned')}{' '}
+                          <span className="font-semibold">{t('group.number')} {suggestedGroup.groupNumber || '-'}</span>
+                          {' '}({formatDateBG(suggestedGroup.courseStartDate)} - {formatDateBG(suggestedGroup.courseEndDate)})
+                          {' '}
+                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                            suggestedGroup.status === 'active' ? 'bg-blue-100 text-blue-700' :
+                            'bg-slate-100 text-slate-700'
+                          }`}>
+                            {suggestedGroup.status === 'active' ? t('modal.active') : t('modal.planned')}
+                          </span>
+                        </p>
+                      </div>
+                  )}
+                  </>
                 )}
 
                 {/* Manual mode selection */}
@@ -530,13 +563,13 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
                   >
                     <option value="">{t('modal.selectGroup')}</option>
                     {activeGroup && (
-                      <option value={activeGroup.groupNumber.toString()}>
-                        {t('group.number')} {activeGroup.groupNumber} - {formatDateBG(activeGroup.courseStartDate)} ({t('modal.active')})
+                      <option value={(activeGroup.groupNumber || '').toString()}>
+                        {t('group.number')} {activeGroup.groupNumber || '-'} - {formatDateBG(activeGroup.courseStartDate)} ({t('modal.active')})
                       </option>
                     )}
                     {allGroups?.filter(g => g.status === 'planned').map((group) => (
-                      <option key={group.id} value={group.groupNumber.toString()}>
-                        {t('group.number')} {group.groupNumber} - {formatDateBG(group.courseStartDate)} ({t('modal.planned')})
+                      <option key={group.id} value={(group.groupNumber || '').toString()}>
+                        {t('group.number')} {group.groupNumber || '-'} - {formatDateBG(group.courseStartDate)} ({t('modal.planned')})
                       </option>
                     ))}
                   </select>
@@ -579,15 +612,16 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800 disabled:opacity-50"
-                disabled={isSubmitting}
+                className="px-4 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isSubmitting || (formData.groupAssignmentMode === 'auto' && suggestedGroup?.status === 'completed')}
               >
                 {isSubmitting ? t('common.saving') : (participant ? t('modal.update') : t('common.add'))}
               </button>
             </div>
           </form>
         </div>
-      </div>
+      </div> {/* Close Content */}
+      </div> {/* Close Safety Buffer Wrapper */}
 
       {/* Warning Modal */}
       <ConfirmModal
