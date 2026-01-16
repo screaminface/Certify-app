@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db, Participant } from '../db/database';
 import { computeCourseDates } from '../utils/dateUtils';
 import { generateNextUniqueNumber, isUniqueNumberAvailable } from '../utils/uniqueNumberUtils';
-import { recalculateAllAutoGroups, syncGroups, getSuggestedGroup, createGroup, getActiveGroup, isGroupReadOnly } from '../utils/groupUtils';
+import { syncGroups, getSuggestedGroup, createGroup, getActiveGroup, isGroupReadOnly } from '../utils/groupUtils';
 import { isMedicalValidForCourse, MEDICAL_EXPIRED_MESSAGE } from '../utils/medicalValidation';
 
 export interface ParticipantInput {
@@ -33,58 +33,21 @@ export function useParticipants() {
       throw new Error(MEDICAL_EXPIRED_MESSAGE);
     }
 
-    // Determine group assignment
-    let groupNumber: number;
-    let autoGroup: number;
-    let manualGroup: number | null = null;
-    let actualCourseStart = courseStartDate;
-    let actualCourseEnd = courseEndDate;
+    // Check if we should auto-assign to active or planned period
+    // Rule: If courseStart matches active.startDate => add to active
+    //       Else add to planned period matching courseStart (create if doesn't exist)
+    const { group: suggestedGroup, shouldCreate } = await getSuggestedGroup(courseStartDate);
+    
+    // Block adding to completed groups
+    if (suggestedGroup?.status === 'completed') {
+      throw new Error('Не може да добавяте нови участници към приключила група.');
+    }
 
-    if (input.groupNumber !== undefined) {
-      // Manual group assignment
-      manualGroup = input.groupNumber;
-      groupNumber = input.groupNumber;
-      
-      // Get the group to match its dates
-      const selectedGroup = await db.groups.where('groupNumber').equals(groupNumber).first();
-      if (selectedGroup) {
-        // Block adding to ANY completed group (even if unlocked)
-        if (selectedGroup.status === 'completed') {
-          throw new Error('Не може да добавяте нови участници към приключила група. Отключването е само за корекции на съществуващи записи.');
-        }
-        
-        // Validate medical is valid for this group's course start date
-        if (!isMedicalValidForCourse(input.medicalDate, selectedGroup.courseStartDate)) {
-          throw new Error('Медицинският преглед трябва да е преди началото на курса и в рамките на 6 месеца.');
-        }
-        
-        // Use group's existing dates without modifying them
-        actualCourseStart = selectedGroup.courseStartDate;
-        actualCourseEnd = selectedGroup.courseEndDate;
-      }
-      
-      // Still need to calculate autoGroup for the suggested courseStart
-      const { group: suggestedGroup } = await getSuggestedGroup(courseStartDate);
-      autoGroup = suggestedGroup ? suggestedGroup.groupNumber : 1;
-    } else {
-      // Auto assignment: use suggested group
-      const { group: suggestedGroup, shouldCreate } = await getSuggestedGroup(courseStartDate);
-      
-      if (suggestedGroup) {
-        groupNumber = suggestedGroup.groupNumber;
-        autoGroup = suggestedGroup.groupNumber;
-      } else if (shouldCreate) {
-        // Create new planned group
-        const activeGroup = await getActiveGroup();
-        const status = activeGroup ? 'planned' : 'active'; // First group is active
-        const newGroup = await createGroup(courseStartDate, status);
-        groupNumber = newGroup.groupNumber;
-        autoGroup = newGroup.groupNumber;
-      } else {
-        // Fallback
-        autoGroup = 1;
-        groupNumber = 1;
-      }
+    // If no group/period exists for this courseStart, create it
+    if (shouldCreate) {
+      const activeGroup = await getActiveGroup();
+      const status = activeGroup ? 'planned' : 'active'; // First group is active
+      await createGroup(courseStartDate, status);
     }
 
     // Generate or validate unique number
@@ -98,8 +61,7 @@ export function useParticipants() {
     } else {
       // Only generate unique numbers for active group
       // Planned groups get empty uniqueNumber (generated when group becomes active)
-      const targetGroup = await db.groups.where('groupNumber').equals(groupNumber).first();
-      if (targetGroup?.status === 'active') {
+      if (suggestedGroup?.status === 'active') {
         uniqueNumber = await generateNextUniqueNumber();
       } else {
         uniqueNumber = ''; // Empty for planned groups
@@ -119,11 +81,8 @@ export function useParticipants() {
       birthPlace: input.birthPlace || '',
       citizenship: input.citizenship || 'българско',
       medicalDate: input.medicalDate,
-      courseStartDate: actualCourseStart,
-      courseEndDate: actualCourseEnd,
-      groupNumber,
-      autoGroup,
-      manualGroup,
+      courseStartDate,
+      courseEndDate,
       uniqueNumber,
       sent: false,
       documents: false,
@@ -138,8 +97,7 @@ export function useParticipants() {
 
     await db.participants.add(participant);
     
-    // Recalculate all auto groups and sync groups table
-    await recalculateAllAutoGroups();
+    // Sync groups table to ensure all periods exist
     await syncGroups();
     
     return participant;
@@ -152,8 +110,11 @@ export function useParticipants() {
       throw new Error('Participant not found');
     }
 
-    // Check if participant's group is read-only
-    const participantGroup = await db.groups.where('groupNumber').equals(participant.groupNumber).first();
+    // Check if participant's period/group is read-only
+    const participantGroup = await db.groups
+      .where('courseStartDate')
+      .equals(participant.courseStartDate)
+      .first();
     if (isGroupReadOnly(participantGroup)) {
       throw new Error('Не може да редактирате участник от заключена група. Моля отключете групата първо от Tools.');
     }
@@ -168,7 +129,7 @@ export function useParticipants() {
     if (updates.birthPlace !== undefined) participantUpdates.birthPlace = updates.birthPlace;
     if (updates.citizenship !== undefined) participantUpdates.citizenship = updates.citizenship;
 
-    // If medical date changed, validate it
+    // If medical date changed, recalculate course dates
     if (updates.medicalDate && updates.medicalDate !== participant.medicalDate) {
       // Compute new course dates
       const { courseStartDate, courseEndDate } = computeCourseDates(updates.medicalDate);
@@ -181,72 +142,6 @@ export function useParticipants() {
       participantUpdates.medicalDate = updates.medicalDate;
       participantUpdates.courseStartDate = courseStartDate;
       participantUpdates.courseEndDate = courseEndDate;
-      
-      // Recalculate auto group for the new courseStartDate
-      const { group: suggestedGroup } = await getSuggestedGroup(courseStartDate);
-      participantUpdates.autoGroup = suggestedGroup ? suggestedGroup.groupNumber : participant.autoGroup;
-      
-      // If no manual override, update groupNumber
-      if (participant.manualGroup === null) {
-        participantUpdates.groupNumber = participantUpdates.autoGroup;
-      }
-    }
-
-    // Handle groupNumber from ParticipantInput (for manual group assignment)
-    if (updates.groupNumber !== undefined) {
-      participantUpdates.manualGroup = updates.groupNumber;
-      participantUpdates.groupNumber = updates.groupNumber;
-      
-      // Match the group's dates
-      const selectedGroup = await db.groups.where('groupNumber').equals(updates.groupNumber).first();
-      if (selectedGroup) {
-        // Block moving to completed groups
-        if (selectedGroup.status === 'completed') {
-          throw new Error('Не може да преместите участник към приключила група. Отключването е само за корекции на съществуващи записи.');
-        }
-        
-        // Validate medical is valid for this group's course start date
-        if (!isMedicalValidForCourse(participant.medicalDate, selectedGroup.courseStartDate)) {
-          throw new Error('Медицинският преглед трябва да е преди началото на курса и в рамките на 6 месеца.');
-        }
-        
-        participantUpdates.courseStartDate = selectedGroup.courseStartDate;
-        participantUpdates.courseEndDate = selectedGroup.courseEndDate;
-      }
-    }
-
-    // If manual group is being cleared
-    if (updates.manualGroup !== undefined) {
-      if (updates.manualGroup === null) {
-        // Clearing manual override - use auto group
-        participantUpdates.manualGroup = null;
-        participantUpdates.groupNumber = participant.autoGroup;
-        // Restore suggested dates
-        const { courseStartDate, courseEndDate } = computeCourseDates(participant.medicalDate);
-        participantUpdates.courseStartDate = courseStartDate;
-        participantUpdates.courseEndDate = courseEndDate;
-      } else {
-        // Setting manual override
-        participantUpdates.manualGroup = updates.manualGroup;
-        participantUpdates.groupNumber = updates.manualGroup;
-        // Match the group's dates
-        const selectedGroup = await db.groups.where('groupNumber').equals(updates.manualGroup).first();
-        if (selectedGroup) {
-          // Block moving to completed groups (even unlocked - no new additions)
-          if (selectedGroup.status === 'completed') {
-            throw new Error('Не може да преместите участник към приключила група. Отключването е само за корекции на съществуващи записи.');
-          }
-          
-          // Validate medical is valid for this group's course start date
-          if (!isMedicalValidForCourse(participant.medicalDate, selectedGroup.courseStartDate)) {
-            throw new Error('Медицинският преглед трябва да е преди началото на курса и в рамките на 6 месеца.');
-          }
-          
-          // Use group's existing dates without modifying them
-          participantUpdates.courseStartDate = selectedGroup.courseStartDate;
-          participantUpdates.courseEndDate = selectedGroup.courseEndDate;
-        }
-      }
     }
 
     // If unique number changed, validate it
@@ -293,8 +188,7 @@ export function useParticipants() {
 
     await db.participants.update(id, participantUpdates);
 
-    // Recalculate all auto groups and sync groups table
-    await recalculateAllAutoGroups();
+    // Sync groups table to ensure all periods exist
     await syncGroups();
   };
 
@@ -302,8 +196,7 @@ export function useParticipants() {
   const deleteParticipant = async (id: string): Promise<void> => {
     await db.participants.delete(id);
     
-    // Recalculate all auto groups and sync groups table
-    await recalculateAllAutoGroups();
+    // Sync groups table to ensure all periods exist
     await syncGroups();
   };
 
