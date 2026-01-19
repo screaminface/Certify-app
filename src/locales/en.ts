@@ -187,7 +187,7 @@ export default {
   'tools.completedCourses': 'Finished courses',
   'tools.showAll': 'Show all',
   'tools.hide': 'Hide',
-  'tools.reopenForEdits': 'Reopen for edits',
+  'tools.reopenForEdits': 'Reopen',
   'tools.returnToPlanned': 'Return to planned',
   'tools.archiveGroup': 'Archive',
   'tools.completedOn': 'Completed',

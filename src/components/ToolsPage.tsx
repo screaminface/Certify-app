@@ -834,7 +834,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
               
               return (
                 <div key={group.id} className="border border-amber-200 rounded-lg p-4 bg-amber-50 hover:shadow-md hover:border-amber-300 transition-all duration-200">
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start justify-between gap-2 sm:gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-semibold text-amber-900">{t('group.number')} {group.groupNumber}</h4>
@@ -854,10 +854,10 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
                     <div className="flex flex-col gap-2">
                       <button
                         onClick={() => handleMakeActive(group.id)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 hover:shadow-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 hover:shadow-lg text-sm font-medium transition-all duration-200 flex items-center gap-2"
                       >
-                        <CheckCircle className="w-4 h-4" strokeWidth={2} />
-                        {t('tools.makeActive')}
+                        <CheckCircle className="w-4 h-4 shrink-0" strokeWidth={2} />
+                        <span>{t('tools.makeActive')}</span>
                       </button>
                     </div>
                   </div>
@@ -896,7 +896,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
               
               return (
                 <div key={group.id} className="border border-slate-300 rounded-lg p-4 bg-slate-50 hover:shadow-md hover:border-slate-400 transition-all duration-200">
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start justify-between gap-2 sm:gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-semibold text-slate-800">{t('group.number')} {group.groupNumber}</h4>
@@ -922,10 +922,10 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
                     <div className="flex flex-col gap-2">
                       <button
                         onClick={() => handleReopenArchived(group.id)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:shadow-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                        className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:shadow-lg text-sm font-medium transition-all duration-200 flex items-center gap-2"
                       >
-                        <RotateCcw className="w-4 h-4" strokeWidth={2} />
-                        {t('tools.reopenForEdits')}
+                        <RotateCcw className="w-4 h-4 shrink-0" strokeWidth={2} />
+                        <span>{t('tools.reopenForEdits')}</span>
                       </button>
                     </div>
                   </div>

@@ -172,7 +172,7 @@ export default {
   'tools.completedCourses': 'Завършени курсове',
   'tools.showAll': 'Покажи всички',
   'tools.hide': 'Скрий',
-  'tools.reopenForEdits': 'Отвори за корекции',
+  'tools.reopenForEdits': 'Отвори',
   'tools.returnToPlanned': 'Върни в планирани',
   'tools.archiveGroup': 'Архивирай',
   'tools.completedOn': 'Приключена',

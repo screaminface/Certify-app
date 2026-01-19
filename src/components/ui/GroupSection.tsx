@@ -130,7 +130,7 @@ export function GroupSection({
         >
           <div className="overflow-hidden">
             <div 
-              className={`px-2 pb-2 transition-transform duration-150 ease-out ${
+              className={`px-1.5 sm:px-2 pb-2 transition-transform duration-150 ease-out ${
                 isCollapsed ? 'translate-y-[-8px]' : 'translate-y-0'
               }`}
               style={{ willChange: isCollapsed ? 'auto' : 'transform' }}

@@ -438,7 +438,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         onMouseDown={() => handleLongPressStart(participant.id, participant)}
         onMouseUp={handleLongPressEnd}
         onMouseLeave={handleLongPressEnd}
-        className={`bg-white rounded-lg shadow-sm p-4 border transition-all duration-150 ${
+        className={`bg-white rounded-lg shadow-sm p-3 md:p-4 border transition-all duration-150 ${
           isSelected
             ? "border-blue-500 ring-2 ring-blue-200"
             : "border-slate-200"
@@ -522,39 +522,43 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         </div>
 
         {/* Dates and Group */}
-        <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
-          <div>
-            <span className="text-slate-500">{t("participant.medical")}:</span>
-            <span className="ml-1 font-medium text-slate-900">
+        <div className="grid grid-cols-2 gap-x-2 gap-y-2 mb-3">
+          <div className="flex flex-col min-w-0">
+            <span className="text-slate-500 text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold truncate">
+              {t("participant.medical")}
+            </span>
+            <span className="font-bold text-sm text-slate-900 truncate">
               {formatDateBG(participant.medicalDate)}
             </span>
           </div>
-          <div>
-            <span className="text-slate-500">{t("participant.period")}:</span>
-            <span className="ml-1 font-medium text-slate-900">
+          <div className="flex flex-col min-w-0 text-right">
+            <span className="text-slate-500 text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold truncate">
+              {t("participant.period")}
+            </span>
+            <span className="font-bold text-sm text-slate-900 truncate">
               {formatDateBG(participant.courseStartDate)}
             </span>
           </div>
-          <div>
-            <span className="text-slate-500">
-              {t("participant.courseStart")}:
+          <div className="flex flex-col min-w-0">
+            <span className="text-slate-500 text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold truncate">
+              {t("participant.courseStart")}
             </span>
-            <span className="ml-1 font-medium text-slate-900">
+            <span className="font-bold text-sm text-slate-900 truncate">
               {formatDateBG(participant.courseStartDate)}
             </span>
           </div>
-          <div>
-            <span className="text-slate-500">
-              {t("participant.courseEnd")}:
+          <div className="flex flex-col min-w-0 text-right">
+            <span className="text-slate-500 text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold truncate">
+              {t("participant.courseEnd")}
             </span>
-            <span className="ml-1 font-medium text-slate-900">
+            <span className="font-bold text-sm text-slate-900 truncate">
               {formatDateBG(participant.courseEndDate)}
             </span>
           </div>
         </div>
 
         {/* Status Chips */}
-        <div className="flex gap-1">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-1">
           <button
             onClick={(e) => {
               e.stopPropagation();
