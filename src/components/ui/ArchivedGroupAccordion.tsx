@@ -138,7 +138,7 @@ export const ArchivedGroupAccordion: React.FC<ArchivedGroupAccordionProps> = ({
                         {t('participant.paid')}
                       </th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                        {t('participant.completed')}
+                        {t('filters.status')}
                       </th>
                     </tr>
                   </thead>

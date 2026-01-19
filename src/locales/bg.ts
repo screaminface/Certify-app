@@ -57,6 +57,7 @@ export default {
   'participant.completedBadge': 'Завършен',
   'participant.notCompleted': 'Незавършен',
   'participant.manual': 'Ръчно',
+  'participant.details': 'Детайли',
   'participant.actions': 'Действия',
   'participants.noParticipantsInGroup': 'Няма участници в тази група',
   'participants.noActive': 'Няма активна група',
@@ -127,7 +128,7 @@ export default {
   'filters.apply': 'Приложи',
   
   // Completed Column
-  'completed.done': 'Готово',
+  'completed.done': 'Завършен',
   'completed.pending': 'В процес',
   
   // Tools Page
@@ -351,4 +352,20 @@ export default {
   'security.lockNow': 'Заключи сега',
   'security.disable': 'Деактивирай ПИН',
   'security.setPin': 'Задай ПИН код',
+  'security.setupSuccess': 'Заключването е активирано успешно!',
+  'security.disableSuccess': 'Заключването е деактивирано.',
+  'security.incorrectPin': 'Невалиден ПИН код',
+  'security.setPinTitle': 'Задай ПИН код',
+  'security.confirmPinTitle': 'Потвърди ПИН кода',
+  'security.enterPinToDisable': 'Въведи ПИН за деактивиране',
+  'security.appLocked': 'Приложението е заключено',
+  'security.enter4DigitPin': 'Въведи 4-цифрен ПИН',
+  'security.reEnterToConfirm': 'Въведи отново за потвърждение',
+  'security.enterYourPin': 'Въведи своя ПИН',
+  'security.forgot': 'Забравен ПИН?',
+  'security.resetDataTitle': 'Нулиране на данни и ПИН?',
+  'security.resetDataMessage': 'Ако сте забравили своя ПИН, единственият начин да получите достъп до приложението е да НУЛИРАТЕ всички локални данни. Това ще изтрие всички участници и групи. След това можете да ги възстановите от резервно копие (backup).',
+  'security.resetDataConfirm': 'Да, нулирай всичко',
+  'security.pinMismatch': 'ПИН кодовете не съвпадат. Опитайте отново.',
+  'security.error': 'Възникна грешка. Моля, опитайте отново.',
 };

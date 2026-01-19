@@ -111,9 +111,9 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       setLockMode(null);
       setIsAppLocked(isPinSet());
       if (lockMode === 'setup') {
-          showAlert(t('common.success'), 'App Lock enabled successfully!', 'success');
+          showAlert(t('common.success'), t('security.setupSuccess'), 'success');
       } else if (lockMode === 'disable') {
-         showAlert(t('common.success'), 'App Lock disabled.', 'info');
+         showAlert(t('common.success'), t('security.disableSuccess'), 'info');
       }
   };
 
@@ -1043,16 +1043,14 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
             <Lock className="w-5 h-5 text-slate-900" />
             <h3 className="text-lg font-bold text-slate-900">{t('security.title')}</h3>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-1">
                    <h4 className="font-semibold text-slate-700">
                       {isAppLocked ? t('security.enabled') : t('security.disabled')}
                    </h4>
-                   {isAppLocked ? (
+                   {isAppLocked && (
                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{t('security.active')}</span>
-                   ) : (
-                       <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-medium">{t('security.inactive')}</span>
                    )}
                 </div>
                 <p className="text-sm text-slate-500 max-w-md">

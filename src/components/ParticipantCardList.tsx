@@ -3,6 +3,7 @@ import { Participant, db, Group } from "../db/database";
 import { useParticipants } from "../hooks/useParticipants";
 import { useLanguage } from "../contexts/LanguageContext";
 import { KebabMenu } from "./ui/KebabMenu";
+import { DetailModal } from "./ui/DetailModal";
 import { StatusChip } from "./ui/StatusChip";
 import { Badge } from "./ui/Badge";
 import { ConfirmModal } from "./ui/ConfirmModal";
@@ -31,7 +32,6 @@ interface ParticipantCardListProps {
 }
 
 export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
-  // ...existing code...
   participants,
   onEdit,
   onDelete,
@@ -48,6 +48,14 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     null
   );
   const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    participant?: Participant;
+  }>({
+    isOpen: false,
+    participant: undefined,
+  });
+
+  const [detailModal, setDetailModal] = useState<{
     isOpen: boolean;
     participant?: Participant;
   }>({
@@ -512,6 +520,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             {!isLocked && (
               <KebabMenu
                 onEdit={() => onEdit(participant)}
+                onDetails={() => setDetailModal({ isOpen: true, participant })}
                 onGenerate={groupMap.get(participant.courseStartDate)?.status === 'active' 
                   ? () => handleGenerateCertificate(participant) 
                   : undefined}
@@ -618,10 +627,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
   // Simplified render for archived participants (read-only card)
   const renderArchivedParticipantCard = (participant: Participant) => {
-    const completed =
-      participant.completedOverride !== null
-        ? participant.completedOverride
-        : participant.completedComputed;
+    const isCompleted = getCompletedValue(participant);
 
     return (
       <div
@@ -637,11 +643,37 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
               {participant.personName}
             </h4>
           </div>
-          {participant.uniqueNumber && (
-            <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-700">
-              {participant.uniqueNumber}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-1 items-end shrink-0">
+              {participant.uniqueNumber && (
+                <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-700">
+                  {participant.uniqueNumber}
+                </span>
+              )}
+              <div className="flex gap-1">
+                {isCompleted && (
+                  <Badge
+                    label={t("participant.completedBadge")}
+                    variant="success"
+                    icon="check"
+                  />
+                )}
+                {isCompletedOverridden(participant) && (
+                  <Badge
+                    label={t("participant.manual")}
+                    variant="info"
+                    icon="manual"
+                  />
+                )}
+                {!isCompleted && !isCompletedOverridden(participant) && (
+                   <span className="text-[10px] text-slate-400 italic font-medium">{t('completed.pending')}</span>
+                )}
+              </div>
+            </div>
+            <KebabMenu
+              onDetails={() => setDetailModal({ isOpen: true, participant })}
+            />
+          </div>
         </div>
 
         <div className="text-sm text-slate-600 mb-2">
@@ -658,7 +690,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
               disabled
               className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
             />
-            Изпратен
+            {t("participant.sent")}
           </label>
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
             <input
@@ -667,7 +699,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
               disabled
               className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
             />
-            Документи
+            {t("participant.documents")}
           </label>
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
             <input
@@ -676,7 +708,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
               disabled
               className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
             />
-            Предаден
+            {t("participant.handed")}
           </label>
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
             <input
@@ -685,16 +717,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
               disabled
               className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
             />
-            Платен
-          </label>
-          <label className="flex items-center gap-1.5 text-xs text-slate-600">
-            <input
-              type="checkbox"
-              checked={completed}
-              disabled
-              className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
-            />
-            Завършен
+            {t("participant.paid")}
           </label>
         </div>
       </div>
@@ -716,6 +739,12 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         selectedIds={Array.from(selectedIds)}
         onClearSelection={handleClearSelection}
         onActionComplete={handleBulkActionComplete}
+      />
+
+      <DetailModal
+        isOpen={detailModal.isOpen}
+        onClose={() => setDetailModal({ isOpen: false, participant: undefined })}
+        participant={detailModal.participant}
       />
 
       <AlertModal

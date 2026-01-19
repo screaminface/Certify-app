@@ -11,6 +11,7 @@ import { formatDateBG } from '../utils/medicalValidation';
 import { isGroupReadOnly } from '../utils/groupUtils';
 import { generateCertificate } from '../utils/certificateGenerator';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { Badge } from './ui/Badge';
 import { AlertModal } from './ui/AlertModal';
 
 
@@ -432,7 +433,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     setDeleteConfirm({ isOpen: false, participant: undefined });
   };
 
-  // Render a participant row - extracted for reusability
+    // Render a participant row - extracted for reusability
   const renderParticipantRow = (participant: Participant) => {
     const group = groupMap.get(participant.courseStartDate);
     const isReadOnly = isParticipantReadOnly(participant);
@@ -675,15 +676,15 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
 
   // Simplified render for archived participants (read-only)
   const renderArchivedParticipantRow = (participant: Participant) => {
-    const completed = participant.completedOverride !== null ? participant.completedOverride : participant.completedComputed;
-    
+    const isCompleted = getCompletedValue(participant);
+
     return (
       <tr key={participant.id} className="hover:bg-slate-50 transition-colors">
         <td className="px-3 py-2 text-sm text-slate-900">
           <CompanyBadge companyName={participant.companyName} />
         </td>
         <td className="px-3 py-2 text-sm text-slate-900">
-          <div 
+          <div
             className="cursor-help"
             onMouseEnter={(e) => handleNameMouseEnter(e, participant)}
             onMouseLeave={handleNameMouseLeave}
@@ -696,7 +697,9 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             {participant.uniqueNumber}
           </span>
         </td>
-        <td className="px-3 py-2 text-sm text-slate-600">{formatDateBG(participant.medicalDate)}</td>
+        <td className="px-3 py-2 text-sm text-slate-600">
+          {formatDateBG(participant.medicalDate)}
+        </td>
         <td className="px-3 py-2 text-center">
           <input
             type="checkbox"
@@ -734,12 +737,25 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
           />
         </td>
         <td className="px-3 py-2 text-center">
-          <input
-            type="checkbox"
-            checked={completed}
-            disabled
-            className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
-          />
+          <div className="flex items-center justify-center gap-1">
+             {isCompleted && (
+               <Badge
+                 label={t("participant.completedBadge")}
+                 variant="success"
+                 icon="check"
+               />
+             )}
+             {isCompletedOverridden(participant) && (
+               <Badge
+                 label={t("participant.manual")}
+                 variant="info"
+                 icon="manual"
+               />
+             )}
+             {!isCompleted && !isCompletedOverridden(participant) && (
+               <span className="text-xs text-slate-400 italic">{t('completed.pending')}</span>
+             )}
+          </div>
         </td>
       </tr>
     );
@@ -883,7 +899,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                             {t('participant.paid')}
                           </th>
                           <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                            {t('participant.completed')}
+                            {t('filters.status')}
                           </th>
                           <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
                             {t('common.delete')}

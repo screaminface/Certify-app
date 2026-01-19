@@ -57,6 +57,7 @@ export default {
   'participant.completedBadge': 'Completed',
   'participant.notCompleted': 'Not Completed',
   'participant.manual': 'Manual',
+  'participant.details': 'Details',
   'participant.actions': 'Actions',
   'participants.noParticipantsInGroup': 'No participants in this group',
   'participants.noActive': 'No active group',
@@ -128,7 +129,7 @@ export default {
   'filters.apply': 'Apply',
   
   // Completed Column
-  'completed.done': 'Done',
+  'completed.done': 'Completed',
   'completed.pending': 'Pending',
   
   // Group Sections
@@ -351,4 +352,20 @@ export default {
   'security.lockNow': 'Lock Now',
   'security.disable': 'Disable PIN',
   'security.setPin': 'Set PIN Code',
+  'security.setupSuccess': 'App Lock enabled successfully!',
+  'security.disableSuccess': 'App Lock disabled.',
+  'security.incorrectPin': 'Incorrect PIN',
+  'security.setPinTitle': 'Set a PIN',
+  'security.confirmPinTitle': 'Confirm PIN',
+  'security.enterPinToDisable': 'Enter PIN to Disable',
+  'security.appLocked': 'App Locked',
+  'security.enter4DigitPin': 'Enter a 4-digit PIN',
+  'security.reEnterToConfirm': 'Re-enter to confirm',
+  'security.enterYourPin': 'Enter your PIN',
+  'security.forgot': 'Forgot?',
+  'security.resetDataTitle': 'Reset Data & PIN?',
+  'security.resetDataMessage': 'If you forgot your PIN, the only way to access the app is to RESET all local data. This will delete all participants and groups. You can then restore from a backup file.',
+  'security.resetDataConfirm': 'Yes, Reset Everything',
+  'security.pinMismatch': 'PINs do not match. Try again.',
+  'security.error': 'An error occurred. Please try again.',
 };

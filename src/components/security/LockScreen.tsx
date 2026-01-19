@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Lock, Delete } from 'lucide-react';
 import { hashPin, verifyPin, getPinConfig, savePinConfig, clearPinConfig } from '../../security/pinLock';
 import { ConfirmModal } from '../ui/ConfirmModal';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface LockScreenProps {
   mode: 'unlock' | 'setup' | 'disable';
@@ -11,6 +12,7 @@ interface LockScreenProps {
 }
 
 export const LockScreen: React.FC<LockScreenProps> = ({ mode, onSuccess, onCancel, onResetData }) => {
+  const { t } = useLanguage();
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [step, setStep] = useState<'enter' | 'confirm'>('enter'); // 'enter' = first 4 digits, 'confirm' = repeat (for setup)
@@ -72,7 +74,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ mode, onSuccess, onCance
         if (isValid) {
           onSuccess();
         } else {
-          setError('Incorrect PIN');
+          setError(t('security.incorrectPin'));
           setPin('');
         }
       } 
@@ -96,7 +98,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ mode, onSuccess, onCance
             });
             onSuccess();
           } else {
-            setError('PINs do not match. Try again.');
+            setError(t('security.pinMismatch'));
             setPin('');
             setConfirmPin('');
             setStep('enter');
@@ -110,13 +112,13 @@ export const LockScreen: React.FC<LockScreenProps> = ({ mode, onSuccess, onCance
             clearPinConfig();
             onSuccess();
         } else {
-            setError('Incorrect PIN');
+            setError(t('security.incorrectPin'));
             setPin('');
         }
       }
     } catch (err) {
       console.error(err);
-      setError('An error occurred. Please try again.');
+      setError(t('security.error'));
     } finally {
       setIsProcessing(false);
     }
@@ -141,7 +143,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ mode, onSuccess, onCance
              onClick={() => setShowForgotModal(true)}
              className="text-xs text-slate-400 font-medium hover:text-red-500 transition-colors"
            >
-             Forgot?
+             {t('security.forgot')}
            </button>
        )}
       </div>
@@ -177,15 +179,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({ mode, onSuccess, onCance
   );
 
   const getTitle = () => {
-      if (mode === 'setup') return step === 'enter' ? 'Set a PIN' : 'Confirm PIN';
-      if (mode === 'disable') return 'Enter PIN to Disable';
-      return 'App Locked';
+      if (mode === 'setup') return step === 'enter' ? t('security.setPinTitle') : t('security.confirmPinTitle');
+      if (mode === 'disable') return t('security.enterPinToDisable');
+      return t('security.appLocked');
   };
 
   const getSubtitle = () => {
       if (error) return error;
-      if (mode === 'setup') return step === 'enter' ? 'Enter a 4-digit PIN' : 'Re-enter to confirm';
-      return 'Enter your PIN';
+      if (mode === 'setup') return step === 'enter' ? t('security.enter4DigitPin') : t('security.reEnterToConfirm');
+      return t('security.enterYourPin');
   };
 
   return (
@@ -214,7 +216,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ mode, onSuccess, onCance
                 onClick={onCancel}
                 className="mt-8 text-slate-500 hover:text-slate-700 font-medium text-sm"
             >
-                Cancel
+                {t('common.cancel')}
             </button>
         )}
       </div>
@@ -231,9 +233,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({ mode, onSuccess, onCance
               }
               setShowForgotModal(false);
           }}
-          title="Reset Data & PIN?"
-          message="If you forgot your PIN, the only way to access the app is to RESET all local data. This will delete all participants and groups. You can then restore from a backup file."
-          confirmText="Yes, Reset Everything"
+          title={t('security.resetDataTitle')}
+          message={t('security.resetDataMessage')}
+          confirmText={t('security.resetDataConfirm')}
           variant="danger"
         />
       )}
