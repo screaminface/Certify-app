@@ -947,7 +947,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                         </span>
                       </div>
                       <span className="text-sm text-amber-700 font-medium">
-                        {participants.length} {participants.length === 1 ? 'участник' : 'участника'}
+                        {participants.length} {participants.length === 1 ? t('group.participant_one') : t('group.participant_other')}
                       </span>
                     </div>
                   </div>

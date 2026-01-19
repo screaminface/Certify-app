@@ -55,7 +55,7 @@ export default {
   'participant.paid': 'Платен',
   'participant.completed': 'Завършен',
   'participant.completedBadge': 'Завършен',
-  'participant.notCompleted': 'Незавършен',
+  'participant.notCompleted': 'В процес',
   'participant.manual': 'Ръчно',
   'participant.details': 'Детайли',
   'participant.actions': 'Действия',
@@ -97,12 +97,19 @@ export default {
   'modal.uniqueNumberExists': 'Този уникален номер вече съществува',
   'modal.completedGroupError': 'Не може да добавяте участник към приключила група',
   'modal.update': 'Обнови',
+  'modal.periodClosed': 'Този период вече е приключен.',
+  'modal.cannotAddComp': 'Не може да добавяте участник към приключила група ({date}).',
+  'modal.selectOtherDate': 'Моля изберете друга дата за медицинския преглед или активирайте нов период.',
   
   // Group Status
   'group.active': 'Активна',
   'group.planned': 'Планирана',
   'group.completed': 'Приключена',
+  'group.group': 'Група',
   'group.number': 'Група',
+  'group.plannedPeriod': 'Планиран период',
+  'group.participant_one': 'участник',
+  'group.participant_other': 'участника',
   
   // Filters
   'filters.title': 'Филтри',
@@ -122,7 +129,7 @@ export default {
   'filters.yes': 'Да',
   'filters.no': 'Не',
   'filters.completed': 'Завършени',
-  'filters.notCompleted': 'Незавършени',
+  'filters.notCompleted': 'В процес',
   'filters.reset': 'Нулирай филтрите',
   'filters.clearAll': 'Изчисти всички',
   'filters.apply': 'Приложи',

@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { Activity, CalendarClock, Archive } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface GroupSectionProps {
   title: string;
@@ -25,6 +26,7 @@ export function GroupSection({
   variant = 'active',
   showCount = true
 }: GroupSectionProps & { showCount?: boolean }) {
+  const { t } = useLanguage();
   const variantConfig = {
     active: {
       bg: 'bg-blue-50',
@@ -101,7 +103,7 @@ export function GroupSection({
           <div className="flex items-center gap-3">
             {participantCount !== undefined && (
               <span className={`text-sm font-medium ${config.text}`}>
-                {participantCount} {participantCount === 1 ? 'участник' : 'участника'}
+                {participantCount} {participantCount === 1 ? t('group.participant_one') : t('group.participant_other')}
               </span>
             )}
             

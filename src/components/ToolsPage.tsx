@@ -125,10 +125,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
 
   // Helper function for proper plural forms
   const getParticipantText = (count: number): string => {
-    if (language === 'bg') {
-      return count === 1 ? 'участник' : 'участници';
-    }
-    return count === 1 ? 'participant' : 'participants';
+    return count === 1 ? t('group.participant_one') : t('group.participant_other');
   };
 
   // Reusable function to process decrypted/plain import data

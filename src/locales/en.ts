@@ -98,12 +98,19 @@ export default {
   'modal.uniqueNumberExists': 'This unique number already exists',
   'modal.completedGroupError': 'Cannot add participant to a completed group',
   'modal.update': 'Update',
+  'modal.periodClosed': 'This period is already closed.',
+  'modal.cannotAddComp': 'Cannot add participant to a completed group ({date}).',
+  'modal.selectOtherDate': 'Please select another medical exam date or activate a new period.',
   
   // Group Status
   'group.active': 'Active',
   'group.planned': 'Planned',
   'group.completed': 'Completed',
+  'group.group': 'Group',
   'group.number': 'Group',
+  'group.plannedPeriod': 'Planned Period',
+  'group.participant_one': 'participant',
+  'group.participant_other': 'participants',
   
   // Filters
   'filters.title': 'Filters',

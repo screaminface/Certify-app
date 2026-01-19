@@ -497,17 +497,15 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                 </span>
               )}
               <div className="flex gap-1">
-                <Badge
-                  label={
-                    getCompletedValue(participant)
-                      ? t("participant.completedBadge")
-                      : t("participant.notCompleted")
-                  }
-                  variant={
-                    getCompletedValue(participant) ? "success" : "neutral"
-                  }
-                  icon={getCompletedValue(participant) ? "check" : undefined}
-                />
+                {getCompletedValue(participant) ? (
+                  <Badge
+                    label={t("participant.completedBadge")}
+                    variant="success"
+                    icon="check"
+                  />
+                ) : (
+                  <span className="text-[10px] text-slate-400 italic font-medium">{t('completed.pending')}</span>
+                )}
                 {isCompletedOverridden(participant) && (
                   <Badge
                     label={t("participant.manual")}
@@ -627,8 +625,6 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
   // Simplified render for archived participants (read-only card)
   const renderArchivedParticipantCard = (participant: Participant) => {
-    const isCompleted = getCompletedValue(participant);
-
     return (
       <div
         key={participant.id}
@@ -651,12 +647,14 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                 </span>
               )}
               <div className="flex gap-1">
-                {isCompleted && (
+                {getCompletedValue(participant) ? (
                   <Badge
                     label={t("participant.completedBadge")}
                     variant="success"
                     icon="check"
                   />
+                ) : (
+                  <span className="text-[10px] text-slate-400 italic font-medium">{t('completed.pending')}</span>
                 )}
                 {isCompletedOverridden(participant) && (
                   <Badge
@@ -664,9 +662,6 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                     variant="info"
                     icon="manual"
                   />
-                )}
-                {!isCompleted && !isCompletedOverridden(participant) && (
-                   <span className="text-[10px] text-slate-400 italic font-medium">{t('completed.pending')}</span>
                 )}
               </div>
             </div>
@@ -677,45 +672,45 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         </div>
 
         <div className="text-sm text-slate-600 mb-2">
-          <div>
+          <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">
             {t("participant.medical")}: {formatDateBG(participant.medicalDate)}
           </div>
         </div>
 
-        <div className="flex gap-2 flex-wrap">
-          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+        <div className="flex flex-nowrap justify-between items-center gap-0.5 mt-auto pt-2 border-t border-slate-50 overflow-hidden">
+          <label className="flex items-center gap-0.5 text-[8px] sm:text-[9px] text-slate-500 whitespace-nowrap">
             <input
               type="checkbox"
               checked={participant.sent}
               disabled
-              className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
+              className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600 rounded opacity-60 cursor-not-allowed"
             />
             {t("participant.sent")}
           </label>
-          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+          <label className="flex items-center gap-0.5 text-[8px] sm:text-[9px] text-slate-500 whitespace-nowrap">
             <input
               type="checkbox"
               checked={participant.documents}
               disabled
-              className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
+              className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600 rounded opacity-60 cursor-not-allowed"
             />
             {t("participant.documents")}
           </label>
-          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+          <label className="flex items-center gap-0.5 text-[8px] sm:text-[9px] text-slate-500 whitespace-nowrap">
             <input
               type="checkbox"
               checked={participant.handedOver}
               disabled
-              className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
+              className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600 rounded opacity-60 cursor-not-allowed"
             />
             {t("participant.handed")}
           </label>
-          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+          <label className="flex items-center gap-0.5 text-[8px] sm:text-[9px] text-slate-500 whitespace-nowrap">
             <input
               type="checkbox"
               checked={participant.paid}
               disabled
-              className="w-4 h-4 text-emerald-600 rounded opacity-60 cursor-not-allowed"
+              className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-600 rounded opacity-60 cursor-not-allowed"
             />
             {t("participant.paid")}
           </label>
@@ -829,11 +824,11 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                     <div className="bg-amber-50 px-3 py-2 border-b border-amber-200">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-amber-900">
-                          {group.groupNumber ? `Група ${group.groupNumber}` : 'Планиран период'}
+                          {group.groupNumber ? `${t('group.group')} ${group.groupNumber}` : t('group.plannedPeriod')}
                         </span>
                         <span className="text-xs text-amber-700 font-medium">
                           {participants.length}{" "}
-                          {participants.length === 1 ? "участник" : "участника"}
+                          {participants.length === 1 ? t('group.participant_one') : t('group.participant_other')}
                         </span>
                       </div>
                       <div className="text-xs text-amber-700 mt-0.5">
@@ -852,7 +847,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             </div>
           ) : (
             <div className="text-center py-8 text-slate-500">
-              Няма планирани групи
+              {t('participants.noParticipantsInGroup')}
             </div>
           )}
         </GroupSection>

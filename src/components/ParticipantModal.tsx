@@ -228,7 +228,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
       if (selectedGroup?.status === 'completed') {
         setErrors(prev => ({
           ...prev,
-          selectedGroupId: 'Не може да добавяте участник към приключила група.'
+          selectedGroupId: t('modal.completedGroupError')
         }));
         return;
       }
@@ -527,11 +527,12 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
                   {suggestedGroup.status === 'completed' ? (
                        <div className="bg-red-50 border border-red-200 p-3 rounded-md">
                         <p className="text-sm text-red-800 font-medium">
-                          ⛔ Този период вече е приключен.
+                          ⛔ {t('modal.periodClosed')}
                           <br />
                           <span className="text-xs font-normal mt-1 block">
-                             Не може да добавяте участник към приключила група ({formatDateBG(suggestedGroup.courseStartDate)}).
-                             Моля изберете друга дата за медицинския преглед или активирайте нов период.
+                             {t('modal.cannotAddComp', { date: formatDateBG(suggestedGroup.courseStartDate) })}
+                             <br />
+                             {t('modal.selectOtherDate')}
                           </span>
                         </p>
                       </div>

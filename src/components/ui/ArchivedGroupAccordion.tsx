@@ -68,14 +68,14 @@ export const ArchivedGroupAccordion: React.FC<ArchivedGroupAccordionProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
           <div className="text-left">
-            <div className="font-semibold text-slate-900">Група {groupNumber}</div>
+            <div className="font-semibold text-slate-900">{t('group.group')} {groupNumber}</div>
             <div className="text-sm text-slate-600">
               {formatDateBG(courseStartDate)} - {formatDateBG(courseEndDate)}
             </div>
           </div>
         </div>
         <div className="text-sm text-slate-600 font-medium">
-          {participants.length} {participants.length === 1 ? 'участник' : 'участника'}
+          {participants.length} {participants.length === 1 ? t('group.participant_one') : t('group.participant_other')}
         </div>
       </button>
 
