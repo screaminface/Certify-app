@@ -478,7 +478,10 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
         <td className="px-3 py-3 text-sm text-slate-600">{formatDateBG(participant.courseStartDate)}</td>
         <td className="px-3 py-3 text-sm text-slate-600">{formatDateBG(participant.courseEndDate)}</td>
         <td className="px-3 py-3 text-sm">
-          <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded inline-block text-slate-700" title="Уникален номер на удостоверение">
+          <span 
+            className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded inline-block text-slate-700 cursor-help" 
+            title={`Уникален номер на удостоверение\nПротокол: ${group?.groupNumber ? group.groupNumber * 5 : '---'}`}
+          >
             {participant.uniqueNumber || "---"}
           </span>
         </td>
@@ -693,7 +696,10 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
           </div>
         </td>
         <td className="px-3 py-2 text-sm">
-          <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded inline-block text-slate-700" title="Уникален номер на удостоверение">
+          <span 
+            className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded inline-block text-slate-700 cursor-help" 
+            title={`Уникален номер на удостоверение\nПротокол: ${group?.groupNumber ? group.groupNumber * 5 : '---'}`}
+          >
             {participant.uniqueNumber}
           </span>
         </td>
