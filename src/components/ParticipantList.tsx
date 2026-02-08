@@ -679,6 +679,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
 
   // Simplified render for archived participants (read-only)
   const renderArchivedParticipantRow = (participant: Participant) => {
+    const group = groupMap.get(participant.courseStartDate);
     const isCompleted = getCompletedValue(participant);
 
     return (
