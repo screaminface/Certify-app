@@ -329,9 +329,28 @@ export async function deleteGroupIfEmpty(groupId: string): Promise<boolean> {
 export async function syncGroups(): Promise<void> {
   const allParticipants = await db.participants.toArray();
   const allGroups = await db.groups.toArray();
-  // 1. Fix Active groups - REMOVED auto-numbering
-  // But we still need the activeGroup variable for later logic
+  
+  // 1. Fix Active groups - assign groupNumber if missing
   const activeGroup = allGroups.find(g => g.status === 'active');
+  if (activeGroup && (activeGroup.groupNumber === null || activeGroup.groupNumber === undefined)) {
+    // Find the next available group number (gap filling or max + 1)
+    const existingNumbers = new Set(
+      allGroups
+        .map(g => g.groupNumber)
+        .filter((n): n is number => n !== null && n !== undefined && n > 0)
+    );
+    
+    let candidate = 1;
+    while (existingNumbers.has(candidate)) {
+      candidate++;
+    }
+    
+    await db.groups.update(activeGroup.id, {
+      groupNumber: candidate,
+      updatedAt: new Date().toISOString()
+    });
+    console.log(`✅ Assigned Group Number ${candidate} to active group`);
+  }
 
   // 1.1 Ensure participants in Active groups have unique numbers
   // This handles cases where a planned group became active 'accidentally' or without triggering number generation
@@ -709,9 +728,20 @@ export async function activateGroupDirectly(groupId: string, moveCurrentToPlanne
   // Assign groupNumber if this is a planned group being activated
   let groupNumber = group.groupNumber;
   if (group.status === 'planned' && groupNumber === null) {
-    // Check if this is a previously completed group being restored (unlikely if status is planned, but for safety)
-    // If truly new/planned, it remains NULL. Number assigned on Close.
-    groupNumber = null;
+    // Find the next available group number (gap filling or max + 1)
+    const existingGroups = await db.groups.toArray();
+    const existingNumbers = new Set(
+      existingGroups
+        .map(g => g.groupNumber)
+        .filter((n): n is number => n !== null && n !== undefined && n > 0)
+    );
+    
+    let candidate = 1;
+    while (existingNumbers.has(candidate)) {
+      candidate++;
+    }
+    groupNumber = candidate;
+    console.log(`Assigning Group Number ${groupNumber} to newly activated group`);
   }
   
   // Activate the selected group

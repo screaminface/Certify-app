@@ -18,7 +18,8 @@ export interface CertificateData {
 }
 
 function pickGrade(): { text: string; value: string } {
-  return Math.random() < 0.5
+  // 70% chance for Отличен (6.00), 30% chance for Мн. добър (5.00)
+  return Math.random() < 0.7
     ? { text: 'Отличен', value: '6.00' }
     : { text: 'Мн. добър', value: '5.00' };
 }
