@@ -177,6 +177,16 @@ export async function initializeSettings() {
         lastUniqueSeq: 0,
         lastResetYear: null
       });
+    } else {
+      // Migration: Update old prefix 3531 to 3533 for year 2026
+      const settings = await db.settings.get(1);
+      if (settings && settings.lastUniquePrefix <= 3531) {
+        await db.settings.update(1, {
+          lastUniquePrefix: 3533,
+          lastUniqueSeq: 0
+        });
+        console.log('✅ Updated unique number prefix to 3533 for 2026');
+      }
     }
   } catch (err) {
     console.error('Failed to initialize settings:', err);
