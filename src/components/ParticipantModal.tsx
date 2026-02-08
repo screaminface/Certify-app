@@ -593,7 +593,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
                   type="text"
                   value={formData.uniqueNumber}
                   onChange={(e) => setFormData({ ...formData, uniqueNumber: e.target.value })}
-                  placeholder={nextUniqueNumber ? `${t('modal.uniqueNumberNext')}: ${nextUniqueNumber}` : 'e.g., 3531-001'}
+                  placeholder={nextUniqueNumber ? `${t('modal.uniqueNumberNext')}: ${nextUniqueNumber}` : 'e.g., 3534-001'}
                   className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                 />
                 {errors.uniqueNumber && (
