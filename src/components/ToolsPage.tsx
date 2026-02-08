@@ -21,7 +21,7 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ConfirmModal } from './ui/ConfirmModal';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Settings as SettingsIcon, Calendar, Users, CheckCircle, ChevronDown, Clock, RotateCcw, X, ChevronRight, Upload, Package, FileSpreadsheet, FileText, Download, AlertTriangle, Archive, AlertCircle, Info, Activity, CalendarClock, Lock } from 'lucide-react';
+import { Settings as SettingsIcon, Calendar, Users, CheckCircle, ChevronDown, Clock, RotateCcw, X, ChevronRight, Upload, Package, FileSpreadsheet, FileText, Download, AlertTriangle, Archive, AlertCircle, Info, Activity, CalendarClock, Lock, Hash } from 'lucide-react';
 import ReactCountryFlag from 'react-country-flag';
 import { LockScreen } from './security/LockScreen';
 import { triggerManualLock } from './security/AppLockGate';
@@ -196,7 +196,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
           }
         });
       }
-      showAlert(t('common.success'), `Import successful! Imported ${backup.participants.length} participants and ${backup.groups.length} groups.`, 'success');
+      showAlert(t('common.success'), t('import.success', { participants: backup.participants.length, groups: backup.groups.length }), 'success');
     } catch (error) {
       console.error('Import processing failed:', error);
       showAlert(t('common.error'), `Failed to import: ${(error as Error).message}`, 'error');
@@ -288,8 +288,8 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
 
     if (mode === 'replace') {
       showConfirm(
-        'WARNING',
-        'WARNING: This will DELETE ALL existing data and replace it with the imported data. Are you sure?',
+        t('common.warning'),
+        t('tools.importReplaceWarning'),
         performImport,
         'danger'
       );
@@ -936,7 +936,10 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       {/* Settings Info */}
       {settings && (
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-bold text-slate-900 mb-4">{t('tools.currentSequence')}</h3>
+          <div className="flex items-center gap-2 mb-4">
+            <Hash className="w-5 h-5 text-blue-600" strokeWidth={2} />
+            <h3 className="text-lg font-bold text-blue-600">{t('tools.currentSequence')}</h3>
+          </div>
           <div className="text-sm text-slate-700 space-y-1">
             <p><strong>{t('tools.prefix')}:</strong> {settings.lastUniquePrefix}</p>
             <p><strong>{t('tools.sequence')}:</strong> {settings.lastUniqueSeq}</p>
@@ -950,10 +953,8 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       {/* Export Section */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
         <div className="flex items-center gap-2 mb-4">
-          <h3 className="text-lg font-bold text-slate-900">{t('tools.exportData')}</h3>
-          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium border border-blue-200 flex items-center gap-1">
-            <Lock size={12} /> Secure
-          </span>
+          <Download className="w-5 h-5 text-emerald-600" strokeWidth={2} />
+          <h3 className="text-lg font-bold text-emerald-600">{t('tools.exportData')}</h3>
         </div>
         <div className="space-y-3">
           <button
@@ -985,7 +986,10 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
 
       {/* Import Section */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-        <h3 className="text-lg font-bold text-slate-900 mb-4">{t('tools.importData')}</h3>
+        <div className="flex items-center gap-2 mb-4">
+          <Upload className="w-5 h-5 text-blue-600" strokeWidth={2} />
+          <h3 className="text-lg font-bold text-blue-600">{t('tools.importData')}</h3>
+        </div>
         <div className="space-y-3">
           <label className="w-full px-6 py-4 bg-blue-100 text-blue-800 border border-blue-300 rounded-lg hover:bg-blue-200 hover:border-blue-400 cursor-pointer text-center font-medium min-h-[48px] transition-all duration-150 flex items-center justify-center gap-2">
             <Download className="w-5 h-5" strokeWidth={2} />
@@ -1037,8 +1041,8 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       {/* Security Settings */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 mb-6">
           <div className="flex items-center gap-2 mb-4">
-            <Lock className="w-5 h-5 text-slate-900" />
-            <h3 className="text-lg font-bold text-slate-900">{t('security.title')}</h3>
+            <Lock className="w-5 h-5 text-amber-600" strokeWidth={2} />
+            <h3 className="text-lg font-bold text-amber-600">{t('security.title')}</h3>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>

@@ -752,12 +752,14 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
       {/* Group Sections */}
       <div className="space-y-4 pb-32">
-        {/* Active Groups Section - ALWAYS VISIBLE */}
+        {/* Active Groups Section */}
+        {(participantsByStatus.active.length > 0 || !hasActiveFilters) && (
         <GroupSection
           title={t("groups.activeSection")}
           count={groupStats.active.count}
           groupNumbers={activeGroupedByDate.length <= 1 && activeGroupNumber.length > 0 ? activeGroupNumber : []}
           dateRange={activeGroupedByDate.length <= 1 ? activeDateRange : undefined}
+          participantCount={participantsByStatus.active.length}
           isCollapsed={collapsedSections.active}
           onToggle={() => toggleSection("active")}
           showCount={activeGroupedByDate.length <= 1 ? (Math.max(activeGroupNumber.length, 0) > 0) : true}
@@ -802,12 +804,15 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             </div>
           )}
         </GroupSection>
+        )}
 
-        {/* Planned Groups Section - ALWAYS VISIBLE */}
+        {/* Planned Groups Section */}
+        {(participantsByStatus.planned.length > 0 || !hasActiveFilters) && (
         <GroupSection
           title={t("groups.plannedSection")}
           count={groupStats.planned.count}
           groupNumbers={[]}
+          participantCount={participantsByStatus.planned.length}
           isCollapsed={collapsedSections.planned}
           onToggle={() => toggleSection("planned")}
           variant="planned"
@@ -851,11 +856,14 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             </div>
           )}
         </GroupSection>
+        )}
 
-        {/* Completed Groups Section (Archive) - ALWAYS VISIBLE */}
+        {/* Completed Groups Section (Archive) */}
+        {(participantsByStatus.completed.length > 0 || !hasActiveFilters) && (
         <GroupSection
           title={t("groups.completedSection")}
           count={groupStats.completed.count}
+          participantCount={participantsByStatus.completed.length}
           isCollapsed={collapsedSections.completed}
           onToggle={() => toggleSection("completed")}
           variant="completed"
@@ -872,6 +880,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                     participants={participants}
                     renderParticipantRow={renderArchivedParticipantCard}
                     mode="cards"
+                    defaultExpanded={hasActiveFilters}
                   />
                 )
               )}
@@ -882,7 +891,21 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             </div>
           )}
         </GroupSection>
+        )}
       </div>
+
+      {/* Empty State - No Results */}
+      {hasActiveFilters && participants.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+          <div className="text-6xl mb-4">🔍</div>
+          <h3 className="text-lg font-semibold text-slate-700 mb-2">
+            Няма намерени резултати
+          </h3>
+          <p className="text-sm text-slate-500 mb-6">
+            Опитай да промениш филтрите
+          </p>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <ConfirmModal

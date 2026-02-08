@@ -54,11 +54,16 @@ export function useGroupSections() {
     localStorage.setItem(STORAGE_KEYS.completed, 'true');
   };
 
+  const setCollapsedState = (state: { active: boolean; planned: boolean; completed: boolean }) => {
+    setCollapsedSections(state);
+  };
+
   return {
     collapsedSections,
     toggleSection,
     expandSection,
     expandAll,
-    resetToDefaults
+    resetToDefaults,
+    setCollapsedState
   };
 }

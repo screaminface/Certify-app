@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { db, Participant, Group, Settings } from '../db/database';
 import { useSettings } from '../hooks/useSettings';
 import { isUniqueNumberAvailable } from '../utils/uniqueNumberUtils';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface ExportImportProps {
   filteredParticipants: Participant[];
@@ -18,6 +19,7 @@ interface BackupData {
 
 export const ExportImport: React.FC<ExportImportProps> = ({ filteredParticipants }) => {
   const { settings, resetYearlySequence } = useSettings();
+  const { t } = useLanguage();
   const [isImporting, setIsImporting] = useState(false);
 
   // Export full backup as JSON
@@ -103,7 +105,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ filteredParticipants
       // Optionally update settings (be careful not to override current counters)
       // For now, we skip settings import to preserve current sequence
 
-      alert(`Import successful! Imported ${backup.participants.length} participants and ${backup.groups.length} groups.`);
+      alert(t('import.success', { participants: backup.participants.length, groups: backup.groups.length }));
     } catch (error) {
       console.error('Import failed:', error);
       alert(`Failed to import: ${(error as Error).message}`);
@@ -114,7 +116,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ filteredParticipants
 
   // Import JSON - Replace mode
   const handleImportReplace = async (file: File) => {
-    if (!window.confirm('WARNING: This will DELETE ALL existing data and replace it with the imported data. Are you sure?')) {
+    if (!window.confirm(t('tools.importReplaceWarning'))) {
       return;
     }
 
@@ -142,7 +144,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ filteredParticipants
         await db.settings.update(1, backup.settings);
       }
 
-      alert(`Import successful! Imported ${backup.participants.length} participants and ${backup.groups.length} groups.`);
+      alert(t('import.success', { participants: backup.participants.length, groups: backup.groups.length }));
     } catch (error) {
       console.error('Import failed:', error);
       alert(`Failed to import: ${(error as Error).message}`);

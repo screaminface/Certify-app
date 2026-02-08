@@ -10,6 +10,7 @@ interface ArchivedGroupAccordionProps {
   participants: Participant[];
   renderParticipantRow: (participant: Participant) => React.ReactNode;
   mode?: 'table' | 'cards'; // Determine if we render table or card list
+  defaultExpanded?: boolean; // Auto-expand when filters are active
 }
 
 export const ArchivedGroupAccordion: React.FC<ArchivedGroupAccordionProps> = ({
@@ -18,10 +19,11 @@ export const ArchivedGroupAccordion: React.FC<ArchivedGroupAccordionProps> = ({
   courseEndDate,
   participants,
   renderParticipantRow,
-  mode = 'table'
+  mode = 'table',
+  defaultExpanded = false
 }) => {
   const { t } = useLanguage();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [sortConfig, setSortConfig] = useState<{ 
     key: 'uniqueNumber' | null; 
     direction: 'asc' | 'desc' 

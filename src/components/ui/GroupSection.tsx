@@ -75,6 +75,13 @@ export function GroupSection({
             {/* Title */}
             <span className="font-bold text-base">{title}</span>
             
+            {/* Participant Count Badge (shown when filtering) */}
+            {participantCount !== undefined && participantCount > 0 && (
+              <span className={`px-2.5 py-1 ${config.countBg} ${config.countText} rounded-full text-xs font-bold`}>
+                {participantCount}
+              </span>
+            )}
+            
             {/* Date Range (if provided) */}
             {dateRange && (
               <span className="text-sm font-medium opacity-75">
@@ -101,12 +108,6 @@ export function GroupSection({
           
           {/* Right side - Participant count (if provided) */}
           <div className="flex items-center gap-3">
-            {participantCount !== undefined && (
-              <span className={`text-sm font-medium ${config.text}`}>
-                {participantCount} {participantCount === 1 ? t('group.participant_one') : t('group.participant_other')}
-              </span>
-            )}
-            
             {/* Chevron icon */}
             <svg
               className={`w-5 h-5 transition-transform duration-200 ease-out ${isCollapsed ? '' : 'rotate-180'}`}

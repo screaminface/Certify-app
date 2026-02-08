@@ -23,7 +23,7 @@ function AppContent() {
   const { t } = useLanguage();
   const { participants, deleteParticipant } = useParticipants();
   const { groups } = useGroups();
-  const { collapsedSections, toggleSection, expandSection, resetToDefaults } = useGroupSections();
+  const { collapsedSections, toggleSection, expandSection, resetToDefaults, setCollapsedState } = useGroupSections();
 
   const [activeTab, setActiveTab] = useState<'participants' | 'tools'>('participants');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -69,6 +69,13 @@ function AppContent() {
   });
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
+  // Store original collapsed state before filtering
+  const [preFilterCollapsedState, setPreFilterCollapsedState] = useState<{
+    active: boolean;
+    planned: boolean;
+    completed: boolean;
+  } | null>(null);
+
   // Check if any filters are active
   const hasActiveFilters = useMemo(() => {
     return searchText !== '' ||
@@ -81,6 +88,24 @@ function AppContent() {
            dateRange.start !== '' ||
            dateRange.end !== '';
   }, [searchText, selectedGroup, statusFilters, dateRange]);
+
+  // Auto-expand sections when filters are active and restore when cleared
+  useEffect(() => {
+    if (hasActiveFilters) {
+      // Save current state before expanding (only once)
+      if (!preFilterCollapsedState) {
+        setPreFilterCollapsedState({ ...collapsedSections });
+      }
+      // Expand all sections to show filtered results
+      if (collapsedSections.active) expandSection('active');
+      if (collapsedSections.planned) expandSection('planned');
+      if (collapsedSections.completed) expandSection('completed');
+    } else if (preFilterCollapsedState) {
+      // Restore previous state when filters are cleared
+      setCollapsedState(preFilterCollapsedState);
+      setPreFilterCollapsedState(null);
+    }
+  }, [hasActiveFilters]);
 
   // Apply filters
   const filteredParticipants = useMemo(() => {
@@ -195,6 +220,24 @@ function AppContent() {
     setDateRange({ start: '', end: '' });
   };
 
+  const handleFilterChange = (filters: { 
+    searchTerm: string; 
+    courseStartDate: string | null; 
+    category: string | null; 
+    status: string 
+  }) => {
+    setSearchText(filters.searchTerm);
+    setSelectedGroup(filters.courseStartDate || '');
+    setStatusFilters({
+      sent: null,
+      documents: null,
+      handedOver: null,
+      paid: null,
+      completed: null
+    });
+    setDateRange({ start: '', end: '' });
+  };
+
   const handleRemoveFilter = (filterType: string, value?: string) => {
     switch (filterType) {
       case 'search':
@@ -294,6 +337,7 @@ function AppContent() {
                   toggleSection={toggleSection}
                   expandSection={expandSection}
                   hasActiveFilters={hasActiveFilters}
+                  onFilterChange={handleFilterChange}
                   groupRefreshKey={groupRefreshKey}
                 />
               </div>
@@ -340,6 +384,8 @@ function AppContent() {
         onDateRangeChange={setDateRange}
         groups={groups?.filter(g => g.groupNumber !== null && g.groupNumber !== undefined).map(g => ({...g, groupNumber: g.groupNumber! })) || []}
         onResetToDefaults={resetToDefaults}
+        visibleCount={visibleParticipants}
+        totalCount={totalParticipants}
       />
 
       {/* Participant Modal */}

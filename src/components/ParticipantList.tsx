@@ -27,6 +27,7 @@ interface ParticipantListProps {
   toggleSection: (section: 'active' | 'planned' | 'completed') => void;
   expandSection: (section: 'active' | 'planned' | 'completed') => void;
   hasActiveFilters: boolean;
+  onFilterChange: (filters: { searchTerm: string; courseStartDate: string | null; category: string | null; status: string }) => void;
   groupRefreshKey?: number;
 }
 
@@ -36,6 +37,8 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   onDelete,
   collapsedSections,
   toggleSection,
+  hasActiveFilters,
+  onFilterChange,
   groupRefreshKey = 0
 }) => {
   const { updateParticipant } = useParticipants();
@@ -820,16 +823,17 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       {/* Group Sections */}
       <div className="space-y-4">
         {/* Active Groups Section */}
-        <GroupSection
-          title={t('groups.activeSection')}
-          count={groupStats.active.count}
-          groupNumbers={activeGroupedByDate.length <= 1 ? activeGroupNumber : []}
-          dateRange={activeGroupedByDate.length <= 1 ? activeDateRange : undefined}
-          participantCount={participantsByStatus.active.length}
-          isCollapsed={collapsedSections.active}
-          onToggle={() => toggleSection('active')}
-          variant="active"
-        >
+        {(participantsByStatus.active.length > 0 || !hasActiveFilters) && (
+          <GroupSection
+            title={t('groups.activeSection')}
+            count={groupStats.active.count}
+            groupNumbers={activeGroupedByDate.length <= 1 ? activeGroupNumber : []}
+            dateRange={activeGroupedByDate.length <= 1 ? activeDateRange : undefined}
+            participantCount={participantsByStatus.active.length}
+            isCollapsed={collapsedSections.active}
+            onToggle={() => toggleSection('active')}
+            variant="active"
+          >
           {activeGroupedByDate.length === 0 ? (
              <div className="text-center py-8 text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-lg">
                {t('participants.noActive')}
@@ -930,10 +934,11 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
               ))}
             </div>
           )}
-        </GroupSection>
+          </GroupSection>
+        )}
 
         {/* Planned Groups Section */}
-        {plannedGroupedByDate.length > 0 && (
+        {(participantsByStatus.planned.length > 0 || !hasActiveFilters) && plannedGroupedByDate.length > 0 && (
           <GroupSection
             title={t('groups.plannedSection')}
             count={groupStats.planned.count}
@@ -1027,7 +1032,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
         )}
 
         {/* Completed Groups Section */}
-        {completedGroupedByDate.length > 0 && (
+        {(participantsByStatus.completed.length > 0 || !hasActiveFilters) && completedGroupedByDate.length > 0 && (
           <GroupSection
             title={t('groups.completedSection')}
             count={groupStats.completed.count}
@@ -1043,7 +1048,9 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                     groupNumber={group.groupNumber || 0}
                     courseStartDate={group.courseStartDate}
                     courseEndDate={group.courseEndDate}
-                    participants={participants}                  renderParticipantRow={renderArchivedParticipantRow}
+                    participants={participants}
+                    renderParticipantRow={renderArchivedParticipantRow}
+                    defaultExpanded={hasActiveFilters}
                   />
                 </div>
               ))}
@@ -1051,6 +1058,32 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
           </GroupSection>
         )}
       </div>
+
+      {/* Empty State - No Results */}
+      {hasActiveFilters && participants.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+          <div className="text-6xl mb-4">🔍</div>
+          <h3 className="text-lg font-semibold text-slate-700 mb-2">
+            Няма намерени резултати
+          </h3>
+          <p className="text-sm text-slate-500 mb-6">
+            Опитай да промениш филтрите или ги изчисти
+          </p>
+          <button
+            onClick={() => {
+              onFilterChange({
+                searchTerm: '',
+                courseStartDate: null,
+                category: null,
+                status: 'all'
+              });
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            Изчисти филтрите
+          </button>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <ConfirmModal

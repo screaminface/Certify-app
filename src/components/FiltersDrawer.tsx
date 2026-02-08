@@ -23,6 +23,8 @@ interface FiltersDrawerProps {
   onDateRangeChange: (range: { start: string; end: string }) => void;
   groups: Array<{ groupNumber: number; courseStartDate: string }>;
   onResetToDefaults: () => void;
+  visibleCount?: number;
+  totalCount?: number;
 }
 
 export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
@@ -37,7 +39,9 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
   dateRange,
   onDateRangeChange,
   groups,
-  onResetToDefaults
+  onResetToDefaults,
+  visibleCount,
+  totalCount
 }) => {
   const { t } = useLanguage();
   
@@ -117,7 +121,14 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
 
         {/* Header - Sticky */}
         <div className="sticky top-0 bg-white flex items-center justify-between p-4 border-b border-slate-200 z-10">
-          <h3 className="text-lg font-bold text-slate-900">{t('filters.title')}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-slate-900">{t('filters.title')}</h3>
+            {visibleCount !== undefined && totalCount !== undefined && (
+              <span className="text-sm font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                {visibleCount} / {totalCount}
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-slate-100 rounded-lg min-w-[44px] min-h-[44px] transition-colors duration-150"
@@ -128,8 +139,8 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
           </button>
         </div>
 
-        {/* Content - scrollable with padding for safe area */}
-        <div className="p-4 pb-4 flex-1 overflow-y-auto overscroll-contain" style={{ maxHeight: 'calc(90vh - 140px)' }}>
+        {/* Content - scrollable with extra padding at bottom for buttons */}
+        <div className="p-4 pb-4 flex-1 overflow-y-auto overscroll-contain">
           {/* Search */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -216,32 +227,32 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
               onChange={(v) => onStatusFilterChange('completed', v)}
             />
           </div>
-        </div>
 
-        {/* Sticky Footer - Both Mobile and Desktop */}
-        <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 flex gap-3 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
-          <button
-            onClick={() => {
-              onSearchTextChange('');
-              onSelectedGroupChange('');
-              onDateRangeChange({ start: '', end: '' });
-              onStatusFilterChange('sent', null);
-              onStatusFilterChange('documents', null);
-              onStatusFilterChange('handedOver', null);
-              onStatusFilterChange('paid', null);
-              onStatusFilterChange('completed', null);
-              onResetToDefaults();
-            }}
-            className="flex-1 px-4 py-3 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-medium min-h-[48px] transition-colors duration-150"
-          >
-            {t('filters.clearAll')}
-          </button>
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium min-h-[48px] transition-colors duration-150"
-          >
-            {t('filters.apply')}
-          </button>
+          {/* Action Buttons - now inside scrollable content */}
+          <div className="mt-6 mb-6 pb-8 flex gap-3">
+            <button
+              onClick={() => {
+                onSearchTextChange('');
+                onSelectedGroupChange('');
+                onDateRangeChange({ start: '', end: '' });
+                onStatusFilterChange('sent', null);
+                onStatusFilterChange('documents', null);
+                onStatusFilterChange('handedOver', null);
+                onStatusFilterChange('paid', null);
+                onStatusFilterChange('completed', null);
+                onResetToDefaults();
+              }}
+              className="flex-1 px-4 py-3 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-medium min-h-[48px] transition-colors duration-150"
+            >
+              {t('filters.clearAll')}
+            </button>
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium min-h-[48px] transition-colors duration-150"
+            >
+              {t('filters.apply')}
+            </button>
+          </div>
         </div>
       </div>
     </>
