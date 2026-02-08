@@ -128,8 +128,8 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-4 pb-4 flex-1 overflow-y-auto">
+        {/* Content - scrollable with padding for safe area */}
+        <div className="p-4 pb-4 flex-1 overflow-y-auto overscroll-contain" style={{ maxHeight: 'calc(90vh - 140px)' }}>
           {/* Search */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-slate-700 mb-2">
