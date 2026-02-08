@@ -105,7 +105,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ filteredParticipants
       // Optionally update settings (be careful not to override current counters)
       // For now, we skip settings import to preserve current sequence
 
-      alert(t('import.success', { participants: backup.participants.length, groups: backup.groups.length }));
+      alert(t('import.success', { participants: String(backup.participants.length), groups: String(backup.groups.length) }));
     } catch (error) {
       console.error('Import failed:', error);
       alert(`Failed to import: ${(error as Error).message}`);
@@ -144,7 +144,7 @@ export const ExportImport: React.FC<ExportImportProps> = ({ filteredParticipants
         await db.settings.update(1, backup.settings);
       }
 
-      alert(t('import.success', { participants: backup.participants.length, groups: backup.groups.length }));
+      alert(t('import.success', { participants: String(backup.participants.length), groups: String(backup.groups.length) }));
     } catch (error) {
       console.error('Import failed:', error);
       alert(`Failed to import: ${(error as Error).message}`);

@@ -196,7 +196,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
           }
         });
       }
-      showAlert(t('common.success'), t('import.success', { participants: backup.participants.length, groups: backup.groups.length }), 'success');
+      showAlert(t('common.success'), t('import.success', { participants: String(backup.participants.length), groups: String(backup.groups.length) }), 'success');
     } catch (error) {
       console.error('Import processing failed:', error);
       showAlert(t('common.error'), `Failed to import: ${(error as Error).message}`, 'error');

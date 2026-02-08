@@ -1,6 +1,5 @@
 import { ReactNode } from 'react';
 import { Activity, CalendarClock, Archive } from 'lucide-react';
-import { useLanguage } from '../../contexts/LanguageContext';
 
 interface GroupSectionProps {
   title: string;
@@ -26,7 +25,6 @@ export function GroupSection({
   variant = 'active',
   showCount = true
 }: GroupSectionProps & { showCount?: boolean }) {
-  const { t } = useLanguage();
   const variantConfig = {
     active: {
       bg: 'bg-blue-50',
