@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { Activity, CalendarClock, Archive } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface GroupSectionProps {
   title: string;
@@ -25,6 +26,8 @@ export function GroupSection({
   variant = 'active',
   showCount = true
 }: GroupSectionProps & { showCount?: boolean }) {
+  const { t } = useLanguage();
+  
   const variantConfig = {
     active: {
       bg: 'bg-blue-50',
@@ -73,10 +76,10 @@ export function GroupSection({
             {/* Title */}
             <span className="font-bold text-base">{title}</span>
             
-            {/* Participant Count Badge (shown when filtering) */}
-            {participantCount !== undefined && participantCount > 0 && (
-              <span className={`px-2.5 py-1 ${config.countBg} ${config.countText} rounded-full text-xs font-bold`}>
-                {participantCount}
+            {/* Group Numbers (show first if provided) */}
+            {showCount && groupNumbers && groupNumbers.length > 0 && (
+              <span className={`px-2.5 py-0.5 ${config.countBg} ${config.countText} rounded-full text-xs font-semibold`}>
+                {groupNumbers.length === 1 ? `№ ${groupNumbers[0]}` : `№ ${groupNumbers.join(', ')}`}
               </span>
             )}
             
@@ -87,20 +90,18 @@ export function GroupSection({
               </span>
             )}
             
-            {/* Count Badge with optional group numbers */}
-            {showCount && (
-              groupNumbers && groupNumbers.length > 0 ? (
-                <span className={`px-2.5 py-0.5 ${config.countBg} ${config.countText} rounded-full text-xs font-semibold`}>
-                  {groupNumbers.length === 1 ? `№ ${groupNumbers[0]}` : `№ ${groupNumbers.join(', ')}`}
-                </span>
-              ) : (
-                // Only show generic count for non-active groups (active is usually 1, which is redundant)
-                variant !== 'active' && (
-                  <span className={`px-2.5 py-0.5 ${config.countBg} ${config.countText} rounded-full text-xs font-semibold`}>
-                    {count}
-                  </span>
-                )
-              )
+            {/* Participant Count with label (shown after date) */}
+            {participantCount !== undefined && participantCount > 0 && (
+              <span className={`px-2.5 py-1 ${config.countBg} ${config.countText} rounded-full text-xs font-bold`}>
+                {participantCount} {participantCount === 1 ? t('group.participant_one') : t('group.participant_other')}
+              </span>
+            )}
+            
+            {/* Count Badge for planned groups (when no group numbers provided) */}
+            {showCount && !groupNumbers && variant === 'planned' && (
+              <span className={`px-2.5 py-0.5 ${config.countBg} ${config.countText} rounded-full text-xs font-semibold`}>
+                {count}
+              </span>
             )}
           </div>
           

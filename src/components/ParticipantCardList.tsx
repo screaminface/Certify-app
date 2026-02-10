@@ -811,7 +811,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         <GroupSection
           title={t("groups.plannedSection")}
           count={groupStats.planned.count}
-          groupNumbers={[]}
+          groupNumbers={plannedGroupedByDate.map(g => g.group.groupNumber).filter((n): n is number => n !== null)}
           participantCount={participantsByStatus.planned.length}
           isCollapsed={collapsedSections.planned}
           onToggle={() => toggleSection("planned")}
@@ -828,17 +828,19 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                     {/* Group Header */}
                     <div className="bg-amber-50 px-3 py-2 border-b border-amber-200">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-amber-900">
-                          {group.groupNumber ? `${t('group.group')} ${group.groupNumber}` : t('group.plannedPeriod')}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {group.groupNumber && (
+                            <span className="px-2 py-0.5 bg-amber-200 text-amber-900 rounded text-xs font-semibold">
+                              № {group.groupNumber}
+                            </span>
+                          )}
+                          <span className="font-semibold text-amber-900">
+                            {formatDateBG(group.courseStartDate)} - {formatDateBG(group.courseEndDate)}
+                          </span>
+                        </div>
                         <span className="text-xs text-amber-700 font-medium">
-                          {participants.length}{" "}
-                          {participants.length === 1 ? t('group.participant_one') : t('group.participant_other')}
+                          {participants.length} {participants.length === 1 ? t('group.participant_one') : t('group.participant_other')}
                         </span>
-                      </div>
-                      <div className="text-xs text-amber-700 mt-0.5">
-                        {formatDateBG(group.courseStartDate)} -{" "}
-                        {formatDateBG(group.courseEndDate)}
                       </div>
                     </div>
 

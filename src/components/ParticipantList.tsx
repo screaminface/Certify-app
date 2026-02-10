@@ -938,7 +938,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
           <GroupSection
             title={t('groups.plannedSection')}
             count={groupStats.planned.count}
-            groupNumbers={[]}
+            groupNumbers={plannedGroupedByDate.map(g => g.group.groupNumber).filter((n): n is number => n !== null)}
             isCollapsed={collapsedSections.planned}
             onToggle={() => toggleSection('planned')}
             variant="planned"
@@ -950,6 +950,11 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                   <div className="bg-amber-50 px-4 py-2 border-b border-amber-200">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
+                        {group.groupNumber && (
+                          <span className="px-2 py-0.5 bg-amber-200 text-amber-900 rounded text-xs font-semibold">
+                            № {group.groupNumber}
+                          </span>
+                        )}
                         <span className="font-semibold text-amber-900">
                           {formatDateBG(group.courseStartDate)} - {formatDateBG(group.courseEndDate)}
                         </span>
