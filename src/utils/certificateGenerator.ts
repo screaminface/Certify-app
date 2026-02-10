@@ -37,8 +37,6 @@ export async function generateCertificate(
   group: Group,
   courseDate?: string
 ): Promise<void> {
-  console.log('🔵 Starting certificate generation for:', participant.personName);
-  
   try {
     // Validate required fields
     if (!participant.personName || !participant.uniqueNumber) {
@@ -50,25 +48,19 @@ export async function generateCertificate(
     }
 
     // Calculate protocol number: groupNumber * 5
-    // Group 1 => F08 = 5, Group 2 => F08 = 10, Group 3 => F08 = 15, etc.
-    // If group has no number yet (planned), use 0
     const protocolNumber = (group.groupNumber || 0) * 5;
-    console.log(`📋 Group ${group.groupNumber || 'planned'} => F08 = ${protocolNumber}`);
 
     // Fetch the template from public folder
-    console.log('📄 Fetching template from /Certify-app/template.docx...');
     const templatePath = '/Certify-app/template.docx';
     const response = await fetch(templatePath);
     
     if (!response.ok) {
-      console.error('❌ Template fetch failed:', response.status, response.statusText);
       throw new Error(`Template not found: ${response.status} ${response.statusText}. Please ensure template.docx exists in /public/ folder.`);
     }
     
     const arrayBuffer = await response.arrayBuffer();
-    console.log('✅ Template loaded successfully, size:', arrayBuffer.byteLength, 'bytes');
 
-    // Load the template with custom delimiters {{ }}
+    // Load the template
     const zip = new PizZip(arrayBuffer);
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
@@ -81,7 +73,6 @@ export async function generateCertificate(
 
     // Pick random grade
     const grade = pickGrade();
-    console.log('🎲 Random grade selected:', grade.text, `(${grade.value})`);
 
     // Determine course date
     const effectiveCourseDate = courseDate || participant.courseEndDate;
@@ -104,21 +95,8 @@ export async function generateCertificate(
       F10: grade.value,
     };
 
-    console.log('📝 Certificate data prepared:', {
-      uniqueNumber: data.F01,
-      name: data.F03,
-      egn: data.F04,
-      birthPlace: data.F05,
-      citizenship: data.F06,
-      year: data.F07,
-      protocol: data.F08,
-      grade: `${data.F09} (${data.F10})`
-    });
-
     // Render the document
-    console.log('⚙️ Rendering document...');
     doc.render(data);
-    console.log('✅ Document rendered successfully');
 
     // Generate the output
     const buf = doc.getZip().generate({
@@ -131,22 +109,10 @@ export async function generateCertificate(
     const sanitizedNumber = sanitizeFileName(participant.uniqueNumber);
     const fileName = `udostoverenie_${sanitizedNumber}_${sanitizedName}.docx`;
     
-    console.log('💾 Saving file:', fileName);
     await saveFile(buf, fileName);
-    console.log('✅ Certificate generated successfully!');
     
   } catch (error) {
-    console.error('❌ Certificate generation failed:', error);
-    
-    if (error instanceof Error) {
-      // Provide more specific error messages
-      if (error.message.includes('Template not found')) {
-        console.error('💡 Make sure template.docx file exists in /public/ folder');
-      } else if (error.message.includes('render')) {
-        console.error('💡 Check if all placeholders in template match {{F01}} to {{F10}}');
-      }
-    }
-    
+    console.error('Certificate generation failed:', error);
     throw error;
   }
 }
@@ -157,8 +123,6 @@ export async function generateBulkCertificates(
   group: Group,
   courseDate?: string
 ): Promise<void> {
-  console.log(`🔵 Starting bulk certificate generation for ${participants.length} participants`);
-  
   let successCount = 0;
   let failCount = 0;
   
@@ -170,13 +134,11 @@ export async function generateBulkCertificates(
       await new Promise(resolve => setTimeout(resolve, 300));
     } catch (error) {
       failCount++;
-      console.error(`❌ Failed to generate certificate for ${participant.personName}:`, error);
+      console.error(`Failed to generate certificate for ${participant.personName}:`, error);
     }
   }
   
-  console.log(`✅ Bulk generation complete: ${successCount} successful, ${failCount} failed`);
-  
   if (failCount > 0) {
-    throw new Error(`${failCount} certificate(s) failed to generate. Check console for details.`);
+    throw new Error(`${failCount} certificate(s) failed to generate.`);
   }
 }

@@ -390,10 +390,6 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     return participant.completedOverride !== null;
   };
 
-  // const handleDeleteClick = (participant: Participant) => {
-  //   setDeleteConfirm({ isOpen: true, participant });
-  // };
-
   const handleGenerateCertificate = async (participant: Participant) => {
     try {
       let group = groupMap.get(participant.courseStartDate);
