@@ -1,8 +1,8 @@
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
-import { saveAs } from 'file-saver';
 import { Participant, Group } from '../db/database';
 import { formatDateBG } from './medicalValidation';
+import { saveFile } from './fileDownload';
 
 export interface CertificateData {
   F01: string; // Certificate number (uniqueNumber)
@@ -132,7 +132,7 @@ export async function generateCertificate(
     const fileName = `udostoverenie_${sanitizedNumber}_${sanitizedName}.docx`;
     
     console.log('💾 Saving file:', fileName);
-    saveAs(buf, fileName);
+    await saveFile(buf, fileName);
     console.log('✅ Certificate generated successfully!');
     
   } catch (error) {
@@ -166,8 +166,8 @@ export async function generateBulkCertificates(
     try {
       await generateCertificate(participant, group, courseDate);
       successCount++;
-      // Small delay to prevent browser from blocking multiple downloads
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Small delay to prevent overwhelming the user with file dialogs
+      await new Promise(resolve => setTimeout(resolve, 300));
     } catch (error) {
       failCount++;
       console.error(`❌ Failed to generate certificate for ${participant.personName}:`, error);

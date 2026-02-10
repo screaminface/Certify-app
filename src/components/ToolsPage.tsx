@@ -6,6 +6,7 @@ import { isUniqueNumberAvailable } from '../utils/uniqueNumberUtils';
 import { formatDateBG } from '../utils/medicalValidation';
 import { encryptBackupJson, decryptBackupJson, isEncryptedBackup, EncryptedBackup } from '../utils/cryptoUtils';
 import { migrateToLatest, CURRENT_BACKUP_VERSION } from '../utils/migrations/backupMigration';
+import { saveFile } from '../utils/fileDownload';
 import { PasswordModal } from './ui/PasswordModal';
 import { AlertModal } from './ui/AlertModal';
 import {
@@ -242,12 +243,8 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       const encryptedData = await encryptBackupJson(backup, password);
       
       const blob = new Blob([JSON.stringify(encryptedData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `course-backup-secure-${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const filename = `course-backup-secure-${new Date().toISOString().split('T')[0]}.json`;
+      await saveFile(blob, filename);
       
       setCryptoModal(prev => ({ ...prev, isOpen: false }));
     } catch (error) {
@@ -400,7 +397,11 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
          XLSX.utils.book_append_sheet(wb, ws, "Empty");
       }
       
-      XLSX.writeFile(wb, `course-export-${new Date().toISOString().split('T')[0]}.xlsx`);
+      // Generate Excel file as blob
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const filename = `course-export-${new Date().toISOString().split('T')[0]}.xlsx`;
+      await saveFile(blob, filename);
     } catch (error) {
       console.error('Excel export failed:', error);
       showAlert(t('common.error'), 'Failed to export Excel file', 'error');
@@ -449,12 +450,8 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       ].join('\n');
 
       const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `course-export-${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const filename = `course-export-${new Date().toISOString().split('T')[0]}.csv`;
+      await saveFile(blob, filename);
     } catch (error) {
       console.error('CSV export failed:', error);
       showAlert(t('common.error'), 'Failed to export CSV file', 'error');

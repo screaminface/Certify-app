@@ -140,9 +140,17 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
     setErrors({});
   }, [participant, isOpen]);
 
-  // Recompute dates when medical date changes
+  // Recompute dates when medical date changes or suggested group changes
+  // Show the REAL group dates (where participant will actually go), not the computed dates
   useEffect(() => {
-    if (formData.medicalDate) {
+    if (suggestedGroup) {
+      // Use the dates from the suggested/active group (this is where they'll actually go)
+      setComputedDates({
+        courseStartDate: suggestedGroup.courseStartDate,
+        courseEndDate: suggestedGroup.courseEndDate
+      });
+    } else if (formData.medicalDate) {
+      // Fallback to computing dates if no group suggested yet
       try {
         const dates = computeCourseDates(formData.medicalDate);
         setComputedDates(dates);
@@ -150,7 +158,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         console.error('Error computing dates:', error);
       }
     }
-  }, [formData.medicalDate]);
+  }, [formData.medicalDate, suggestedGroup]);
 
   const validateForm = async (): Promise<boolean> => {
     const newErrors: Record<string, string> = {};
