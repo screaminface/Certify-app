@@ -395,4 +395,8 @@ export default {
   'security.resetDataConfirm': 'Да, нулирай всичко',
   'security.pinMismatch': 'ПИН кодовете не съвпадат. Опитайте отново.',
   'security.error': 'Възникна грешка. Моля, опитайте отново.',
+  
+  // Certificate
+  'certificate.generated': 'Сертификатът е генериран успешно!',
+  'certificate.error': 'Грешка при генериране на сертификат',
 };

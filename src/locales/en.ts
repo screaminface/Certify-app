@@ -395,4 +395,8 @@ export default {
   'security.resetDataConfirm': 'Yes, Reset Everything',
   'security.pinMismatch': 'PINs do not match. Try again.',
   'security.error': 'An error occurred. Please try again.',
+  
+  // Certificate
+  'certificate.generated': 'Certificate generated successfully!',
+  'certificate.error': 'Error generating certificate',
 };

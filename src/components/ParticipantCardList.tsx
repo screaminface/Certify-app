@@ -419,14 +419,14 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
       setAlertModal({
         isOpen: true,
         title: t('common.success'),
-        message: 'Сертификатът е генериран успешно!', // Using hardcoded BG string as in original, or should I translate? 'Certificate generated successfully'
+        message: t('certificate.generated'),
         variant: 'success'
       });
     } catch (error) {
       setAlertModal({
         isOpen: true,
         title: t('common.error'),
-        message: 'Грешка при генериране на сертификат: ' + (error as Error).message,
+        message: t('certificate.error') + ': ' + (error as Error).message,
         variant: 'error'
       });
     }

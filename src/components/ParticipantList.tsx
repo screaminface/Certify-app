@@ -412,14 +412,14 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       setAlertModal({
         isOpen: true,
         title: t('common.success'),
-        message: 'Сертификатът е генериран успешно!',
+        message: t('certificate.generated'),
         variant: 'success'
       });
     } catch (error) {
       setAlertModal({
         isOpen: true,
         title: t('common.error'),
-        message: 'Грешка при генериране на сертификат: ' + (error as Error).message,
+        message: t('certificate.error') + ': ' + (error as Error).message,
         variant: 'error'
       });
     }
