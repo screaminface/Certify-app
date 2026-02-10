@@ -1,10 +1,24 @@
 /**
+ * Check if app is running as installed PWA
+ */
+function isPWA(): boolean {
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         (window.navigator as any).standalone ||
+         document.referrer.includes('android-app://');
+}
+
+/**
  * Save file with user-selected location (if supported)
  * Falls back to automatic download if File System Access API is not available
  */
 export async function saveFile(blob: Blob, suggestedFilename: string): Promise<void> {
+  console.log('📁 saveFile called for:', suggestedFilename);
+  console.log('🔍 PWA mode:', isPWA());
+  
   // Check if File System Access API is supported
+  // Note: Some PWA implementations may have restricted access
   if ('showSaveFilePicker' in window) {
+    console.log('✅ File System Access API is supported');
     try {
       // Get file extension
       const ext = suggestedFilename.split('.').pop() || '';
@@ -55,9 +69,12 @@ export async function saveFile(blob: Blob, suggestedFilename: string): Promise<v
       }
       console.warn('File System Access API failed, falling back to automatic download:', error);
     }
+  } else {
+    console.log('❌ File System Access API not supported, using fallback');
   }
 
   // Fallback: Automatic download (old method)
+  console.log('⬇️ Using automatic download fallback');
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
