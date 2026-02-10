@@ -28,6 +28,16 @@ export const AlertModal: React.FC<AlertModalProps> = ({
     }
   }, [isOpen, onClose]);
 
+  // Auto-close after 5 seconds
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const getIcon = () => {
