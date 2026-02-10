@@ -90,13 +90,6 @@ export function GroupSection({
               </span>
             )}
             
-            {/* Participant Count with label (shown after date) */}
-            {participantCount !== undefined && participantCount > 0 && (
-              <span className={`px-2.5 py-1 ${config.countBg} ${config.countText} rounded-full text-xs font-bold`}>
-                {participantCount} {participantCount === 1 ? t('group.participant_one') : t('group.participant_other')}
-              </span>
-            )}
-            
             {/* Count Badge for planned groups (when no group numbers provided) */}
             {showCount && !groupNumbers && variant === 'planned' && (
               <span className={`px-2.5 py-0.5 ${config.countBg} ${config.countText} rounded-full text-xs font-semibold`}>
@@ -105,8 +98,15 @@ export function GroupSection({
             )}
           </div>
           
-          {/* Right side - Participant count (if provided) */}
+          {/* Right side - Participant count and chevron */}
           <div className="flex items-center gap-3">
+            {/* Participant Count with label (shown on the right) */}
+            {participantCount !== undefined && (
+              <span className={`px-2.5 py-1 ${config.countBg} ${config.countText} rounded-full text-xs font-bold`}>
+                {participantCount} {participantCount === 1 ? t('group.participant_one') : t('group.participant_other')}
+              </span>
+            )}
+            
             {/* Chevron icon */}
             <svg
               className={`w-5 h-5 transition-transform duration-200 ease-out ${isCollapsed ? '' : 'rotate-180'}`}
