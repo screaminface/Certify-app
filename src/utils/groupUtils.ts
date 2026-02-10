@@ -102,6 +102,18 @@ export async function getSuggestedGroup(medicalDate: string): Promise<{ group: G
   const activeGroup = allGroups.find(g => g.status === 'active');
   const plannedGroups = allGroups.filter(g => g.status === 'planned').sort((a, b) => a.courseStartDate.localeCompare(b.courseStartDate));
   
+  // PRIORITY CHECK: Try to assign to Active Group FIRST if medically valid
+  // Logic: If medical date allows course to start on/before active group date, 
+  // and medical is valid for active group (< 6 months), prefer active group
+  if (activeGroup && courseStartDate <= activeGroup.courseStartDate) {
+    // Medical allows for course starting on courseStartDate (strict monday)
+    // Active group starts on/after that date
+    // Check if medical is valid for active group (< 6 months from active start)
+    if (isMedicalValidForCourse(medicalDate, activeGroup.courseStartDate)) {
+      return { group: activeGroup, shouldCreate: false };
+    }
+  }
+  
   // Check strict match first
   const strictMatchGroup = allGroups.find(g => g.courseStartDate === courseStartDate);
 

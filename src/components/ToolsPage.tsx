@@ -107,6 +107,13 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
   const [lockMode, setLockMode] = useState<'setup' | 'disable' | null>(null);
   const [isAppLocked, setIsAppLocked] = useState(isPinSet());
 
+  // Create Group State
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [createGroupData, setCreateGroupData] = useState({
+    date: '',
+    status: 'planned' as 'active' | 'planned'
+  });
+
   const handleSecuritySuccess = () => {
       setLockMode(null);
       setIsAppLocked(isPinSet());
@@ -669,6 +676,66 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
     );
   };
 
+  // Handle create new group manually
+  const handleCreateGroup = async () => {
+    try {
+      if (!createGroupData.date) {
+        showAlert(t('common.error'), t('tools.createGroupSelectDate'), 'error');
+        return;
+      }
+
+      // Validate that date is a Monday
+      const date = new Date(createGroupData.date);
+      if (date.getDay() !== 1) {
+        showAlert(t('common.error'), t('tools.createGroupMustBeMonday'), 'error');
+        return;
+      }
+
+      // Check if group already exists for this date
+      const existingGroup = await db.groups.where('courseStartDate').equals(createGroupData.date).first();
+      if (existingGroup) {
+        const statusMsg = existingGroup.status === 'active' 
+          ? t('tools.createGroupExistsActive')
+          : existingGroup.status === 'planned'
+          ? t('tools.createGroupExistsPlanned')
+          : t('tools.createGroupExistsCompleted');
+        showAlert(t('common.error'), statusMsg.replace('{date}', formatDateBG(createGroupData.date)), 'error');
+        return;
+      }
+
+      // If creating active group, check if there's already an active group
+      if (createGroupData.status === 'active') {
+        const currentActive = await getActiveGroup();
+        if (currentActive) {
+          showAlert(t('common.warning'), t('tools.createGroupActiveExists'), 'warning');
+          return;
+        }
+      }
+
+      // Check if trying to create planned group before active group
+      if (createGroupData.status === 'planned') {
+        const currentActive = await getActiveGroup();
+        if (currentActive && createGroupData.date < currentActive.courseStartDate) {
+          showAlert(t('common.warning'), t('tools.createGroupBeforeActive'), 'warning');
+          return;
+        }
+      }
+
+      const { createGroup } = await import('../utils/groupUtils');
+      await createGroup(createGroupData.date, createGroupData.status);
+      
+      setShowCreateGroupModal(false);
+      setCreateGroupData({ date: '', status: 'planned' });
+      setRefreshKey(prev => prev + 1);
+      
+      const statusText = createGroupData.status === 'active' ? t('tools.groupActive') : t('tools.groupPlanned');
+      showAlert(t('common.success'), t('tools.createGroupSuccess', { status: statusText, date: formatDateBG(createGroupData.date) }), 'success');
+    } catch (error) {
+      console.error('Failed to create group:', error);
+      showAlert(t('common.error'), t('tools.createGroupFailed', { error: (error as Error).message }), 'error');
+    }
+  };
+
   return (
     <div className="space-y-6 pb-24 md:pb-6">
       {/* Password Modal for Secure Backup */}
@@ -814,6 +881,118 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
           onClose={() => setConfirmAction(null)}
         />
       )}
+
+      {/* Create Group Modal */}
+      {showCreateGroupModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold text-slate-900">{t('tools.createNewGroup')}</h3>
+              <button
+                onClick={() => {
+                  setShowCreateGroupModal(false);
+                  setCreateGroupData({ date: '', status: 'planned' });
+                }}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  {t('tools.courseStartDateMonday')}
+                </label>
+                <input
+                  type="date"
+                  value={createGroupData.date}
+                  onChange={(e) => setCreateGroupData(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  {t('tools.groupStatus')}
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setCreateGroupData(prev => ({ ...prev, status: 'planned' }))}
+                    className={`px-4 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+                      createGroupData.status === 'planned'
+                        ? 'bg-amber-600 text-white ring-2 ring-amber-300'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <CalendarClock className="w-5 h-5" strokeWidth={2} />
+                    {t('tools.groupPlanned')}
+                  </button>
+                  <button
+                    onClick={() => setCreateGroupData(prev => ({ ...prev, status: 'active' }))}
+                    className={`px-4 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+                      createGroupData.status === 'active'
+                        ? 'bg-green-600 text-white ring-2 ring-green-300'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Activity className="w-5 h-5" strokeWidth={2} />
+                    {t('tools.groupActive')}
+                  </button>
+                </div>
+              </div>
+
+              {createGroupData.status === 'active' && activeGroup && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  <AlertTriangle className="w-4 h-4 inline mr-1" />
+                  {t('tools.createGroupActiveWarning')}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowCreateGroupModal(false);
+                  setCreateGroupData({ date: '', status: 'planned' });
+                }}
+                className="flex-1 px-4 py-3 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 font-medium transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleCreateGroup}
+                disabled={!createGroupData.date}
+                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+              >
+                {t('tools.createGroup')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Group Button Section */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg shadow-sm border-2 border-blue-200">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-5 h-5 text-blue-600" strokeWidth={2} />
+              <h3 className="text-lg font-bold text-blue-700">{t('tools.manualGroupCreation')}</h3>
+            </div>
+            <p className="text-sm text-blue-600">
+              {t('tools.manualGroupCreationSubtitle')}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCreateGroupModal(true)}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:shadow-lg font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+          >
+            <Calendar className="w-5 h-5" strokeWidth={2} />
+            {t('tools.newGroup')}
+          </button>
+        </div>
+      </div>
 
       {/* Planned Groups Management */}
       {plannedGroups && plannedGroups.length > 0 && (
