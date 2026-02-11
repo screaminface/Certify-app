@@ -975,8 +975,8 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
 
       {/* Create Group Button Section */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg shadow-sm border-2 border-blue-200">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div className="flex flex-col md:flex-row items-start justify-between gap-4">
+          <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <Calendar className="w-5 h-5 text-blue-600" strokeWidth={2} />
               <h3 className="text-lg font-bold text-blue-700">{t('tools.manualGroupCreation')}</h3>
@@ -987,7 +987,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
           </div>
           <button
             onClick={() => setShowCreateGroupModal(true)}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:shadow-lg font-medium transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+            className="w-full md:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:shadow-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 md:whitespace-nowrap"
           >
             <Calendar className="w-5 h-5" strokeWidth={2} />
             {t('tools.newGroup')}
