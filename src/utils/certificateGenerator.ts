@@ -107,7 +107,8 @@ export async function generateCertificate(
     // Create sanitized filename
     const sanitizedName = sanitizeFileName(participant.personName);
     const sanitizedNumber = sanitizeFileName(participant.uniqueNumber);
-    const fileName = `udostoverenie_${sanitizedNumber}_${sanitizedName}.docx`;
+    const sanitizedCompany = sanitizeFileName(participant.companyName);
+    const fileName = `udostoverenie_${sanitizedNumber}_${sanitizedCompany}_${sanitizedName}.docx`;
     
     await saveFile(buf, fileName);
     
