@@ -1,0 +1,22 @@
+[package]
+name = "certify"
+version = "1.0.0"
+description = "CERTIFY - Certification & Management"
+authors = ["SPI"]
+edition = "2021"
+
+[lib]
+name = "certify_lib"
+crate-type = ["staticlib", "cdylib", "lib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-shell = "2"
