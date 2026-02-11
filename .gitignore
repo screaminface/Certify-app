@@ -37,3 +37,7 @@ build
 # PWA
 sw.js
 workbox-*.js
+
+# Tauri / Rust
+src-tauri/target
+src-tauri/WixTools
