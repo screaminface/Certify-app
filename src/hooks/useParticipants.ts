@@ -193,21 +193,28 @@ export function useParticipants() {
       participantUpdates.courseStartDate = finalCourseStartDate;
       participantUpdates.courseEndDate = finalCourseEndDate;
       
-      // CRITICAL: If participant is moving to active group and has no unique number, assign one
-      // This handles the case where a participant was in a planned group and is being moved to active
-      if (suggestedGroup?.status === 'active' && !participant.uniqueNumber) {
-        // Check for gaps first
+      // CRITICAL: Handle unique number assignment based on group transition
+      const oldGroup = await db.groups.where('courseStartDate').equals(participant.courseStartDate).first();
+      const oldGroupStatus = oldGroup?.status || 'planned';
+      const newGroupStatus = suggestedGroup?.status || 'planned';
+      
+      // If participant is moving TO active group, always reassign number (gap fill)
+      if (newGroupStatus === 'active' && oldGroupStatus !== 'active') {
+        // Moving from planned/completed to active - reassign with gap filling
         const { checkForGaps } = await import('../utils/uniqueNumberUtils');
         const gapNumber = await checkForGaps();
         
         if (gapNumber) {
-          // Use the gap number
           participantUpdates.uniqueNumber = gapNumber;
         } else {
-          // Generate next number
           participantUpdates.uniqueNumber = await generateNextUniqueNumber();
         }
       }
+      // If moving FROM active TO planned, clear the number
+      else if (oldGroupStatus === 'active' && newGroupStatus === 'planned') {
+        participantUpdates.uniqueNumber = '';
+      }
+      // If staying in active or moving between active groups, keep the number (no change)
     }
 
     // If unique number changed, validate it

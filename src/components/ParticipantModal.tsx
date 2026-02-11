@@ -149,6 +149,24 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         courseStartDate: suggestedGroup.courseStartDate,
         courseEndDate: suggestedGroup.courseEndDate
       });
+      
+      // Update suggested unique number for active groups
+      if (suggestedGroup.status === 'active') {
+        Promise.all([
+          generateNextUniqueNumber(),
+          checkForGaps()
+        ]).then(([num, gap]) => {
+          // Show gap number if exists, otherwise next number
+          setNextUniqueNumber(gap || num);
+          setGapNumber(gap);
+        }).catch(err => {
+          console.error('Failed to get unique number:', err);
+        });
+      } else {
+        // Planned group - no unique number
+        setNextUniqueNumber('');
+        setGapNumber(null);
+      }
     } else if (formData.medicalDate) {
       // Fallback to computing dates if no group suggested yet
       try {
@@ -590,10 +608,19 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   {t('modal.uniqueNumberAuto')}
                 </label>
-                {gapNumber && !participant && (
+                {gapNumber && (
                   <div className="mb-2 p-2 bg-amber-50 border border-amber-300 rounded-md">
                     <p className="text-amber-800 text-sm font-medium">
-                      ⚠️ {t('modal.gapWarning', { number: gapNumber })}
+                      ⚠️ {participant 
+                        ? `Участникът ще получи попълващ номер: ${gapNumber}` 
+                        : t('modal.gapWarning', { number: gapNumber })}
+                    </p>
+                  </div>
+                )}
+                {participant && suggestedGroup?.status === 'active' && nextUniqueNumber && (
+                  <div className="mb-2 p-2 bg-blue-50 border border-blue-300 rounded-md">
+                    <p className="text-blue-800 text-sm font-medium">
+                      ℹ️ Преместване в активна група → Уникален номер: <span className="font-bold">{nextUniqueNumber}</span>
                     </p>
                   </div>
                 )}
