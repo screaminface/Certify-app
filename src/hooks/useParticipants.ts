@@ -155,17 +155,43 @@ export function useParticipants() {
 
     // If medical date changed, recalculate course dates
     if (updates.medicalDate && updates.medicalDate !== participant.medicalDate) {
-      // Compute new course dates
-      const { courseStartDate, courseEndDate } = computeCourseDates(updates.medicalDate);
+      // Use getSuggestedGroup logic (same as addParticipant) to respect active group priority
+      const { group: suggestedGroup, shouldCreate, createsForDate } = await getSuggestedGroup(updates.medicalDate);
       
-      // Validate medical is valid for this course
-      if (!isMedicalValidForCourse(updates.medicalDate, courseStartDate)) {
+      // Compute strict course dates for validation
+      const { courseStartDate: strictCourseStartDate } = computeCourseDates(updates.medicalDate);
+      
+      // Determine the actual course start date to use
+      const finalCourseStartDate = suggestedGroup 
+        ? suggestedGroup.courseStartDate 
+        : (createsForDate || strictCourseStartDate);
+
+      const finalCourseEndDate = (() => {
+        const d = new Date(finalCourseStartDate);
+        d.setDate(d.getDate() + 7);
+        return d.toISOString().split('T')[0];
+      })();
+
+      // Validate medical is valid for the determined course
+      if (!isMedicalValidForCourse(updates.medicalDate, finalCourseStartDate)) {
         throw new Error(MEDICAL_EXPIRED_MESSAGE);
       }
 
+      // Block if group is completed
+      if (suggestedGroup?.status === 'completed') {
+        throw new Error('Медицинският преглед отговаря на приключила група (периодът е архивиран).');
+      }
+
+      // If no group exists for this courseStart, create it
+      if (shouldCreate) {
+        const activeGroup = await getActiveGroup();
+        const status = activeGroup ? 'planned' : 'active';
+        await createGroup(finalCourseStartDate, status);
+      }
+
       participantUpdates.medicalDate = updates.medicalDate;
-      participantUpdates.courseStartDate = courseStartDate;
-      participantUpdates.courseEndDate = courseEndDate;
+      participantUpdates.courseStartDate = finalCourseStartDate;
+      participantUpdates.courseEndDate = finalCourseEndDate;
     }
 
     // If unique number changed, validate it

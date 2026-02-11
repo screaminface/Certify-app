@@ -1092,7 +1092,13 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
         onClose={() => setDeleteConfirm({ isOpen: false, participant: undefined })}
         onConfirm={confirmDelete}
         title={t('modal.deleteTitle')}
-        message={t('modal.deleteMessage', { name: deleteConfirm.participant?.personName || '' })}
+        message={
+          <>
+            {t('modal.deleteMessage').split('{name}')[0]}
+            <strong className="font-bold text-slate-900">{deleteConfirm.participant?.personName || ''}</strong>
+            {t('modal.deleteMessage').split('{name}')[1]}
+          </>
+        }
         confirmText={t('common.delete')}
         cancelText={t('common.cancel')}
         variant="danger"

@@ -319,7 +319,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
     >
       {/* Safety Buffer Wrapper - catches clicks near the modal */}
       <div 
-        className="w-full max-w-2xl p-8 cursor-default"
+        className="w-full max-w-2xl p-16 cursor-default"
         onClick={(e) => e.stopPropagation()}
       >
         <div 

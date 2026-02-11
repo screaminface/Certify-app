@@ -7,7 +7,7 @@ export default {
   // Common
   'common.add': 'Добави',
   'common.edit': 'Редактирай',
-  'common.delete': 'Действия',
+  'common.delete': 'Изтрий',
   'common.cancel': 'Отказ',
   'common.save': 'Запази',
   'common.close': 'Затвори',
