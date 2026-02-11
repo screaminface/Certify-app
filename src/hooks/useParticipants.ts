@@ -145,6 +145,9 @@ export function useParticipants() {
 
     // Build the actual updates object for Participant type
     const participantUpdates: Partial<Participant> = {};
+    
+    // Track if we need to realign numbers after update (for Active→Planned transition)
+    let shouldRealignAfterUpdate: string | null = null;
 
     // Copy simple fields if provided
     if (updates.companyName !== undefined) participantUpdates.companyName = updates.companyName;
@@ -210,9 +213,15 @@ export function useParticipants() {
           participantUpdates.uniqueNumber = await generateNextUniqueNumber();
         }
       }
-      // If moving FROM active TO planned, clear the number
+      // If moving FROM active TO planned, clear the number AND realign to create gap
       else if (oldGroupStatus === 'active' && newGroupStatus === 'planned') {
+        const oldUniqueNumber = participant.uniqueNumber;
         participantUpdates.uniqueNumber = '';
+        
+        // Mark for realignment after DB update
+        if (oldUniqueNumber) {
+          shouldRealignAfterUpdate = oldUniqueNumber;
+        }
       }
       // If staying in active or moving between active groups, keep the number (no change)
     }
@@ -260,6 +269,12 @@ export function useParticipants() {
     // Note: We keep completedAt even if participant becomes uncompleted (audit trail)
 
     await db.participants.update(id, participantUpdates);
+
+    // If we cleared a unique number (Active→Planned), realign to make it available as gap
+    if (shouldRealignAfterUpdate) {
+      const { realignUniqueNumbers } = await import('../utils/uniqueNumberUtils');
+      await realignUniqueNumbers(shouldRealignAfterUpdate);
+    }
 
     // Sync groups table to ensure all periods exist
     await syncGroups();

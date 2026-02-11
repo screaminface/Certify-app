@@ -304,32 +304,44 @@ export async function checkForGaps(): Promise<string | null> {
         return a.seq - b.seq;
       });
 
+    console.log('[checkForGaps] Numbers in DB:', numbers.map(n => formatUniqueNumber(n.prefix, n.seq)));
+
     if (numbers.length === 0) return null;
 
-    // Check for gaps in the sequence
+    // With double increment (prefix+1, seq+1), each participant has unique prefix
+    // Check for gaps in prefix sequence BETWEEN existing numbers
     for (let i = 0; i < numbers.length - 1; i++) {
       const current = numbers[i];
       const next = numbers[i + 1];
 
-      // Same prefix - check seq continuity
-      if (current.prefix === next.prefix) {
-        if (next.seq - current.seq > 1) {
-          // Gap found! Return the missing number
-          return formatUniqueNumber(current.prefix, current.seq + 1);
-        }
-      } 
-      // Different prefix - check if there's a gap
-      else if (next.prefix - current.prefix > 1) {
-        // Gap in prefix
-        return formatUniqueNumber(current.prefix + 1, current.seq + 1);
-      }
-      // Sequential prefix but need to check seq continuity
-      else if (next.prefix === current.prefix + 1) {
-        // This is normal progression, no gap
-        continue;
+      // Check if there's a gap in prefix sequence
+      // Expected: next.prefix should be current.prefix + 1
+      if (next.prefix !== current.prefix + 1) {
+        // Gap found! Return the missing number
+        const gapNumber = formatUniqueNumber(current.prefix + 1, current.seq + 1);
+        console.log('[checkForGaps] Gap found between numbers:', gapNumber);
+        return gapNumber;
       }
     }
 
+    // CRITICAL: Also check if there's a gap AFTER the last number
+    // This happens when the last participant was deleted/moved to planned
+    // Settings would be updated to the new max, but there's a gap before the next generated number
+    const settings = await db.settings.get(1);
+    console.log('[checkForGaps] Settings:', settings ? `${settings.lastUniquePrefix}-${settings.lastUniqueSeq}` : 'none');
+    if (settings && numbers.length > 0) {
+      const lastInDB = numbers[numbers.length - 1];
+      console.log('[checkForGaps] Last in DB:', formatUniqueNumber(lastInDB.prefix, lastInDB.seq));
+      // If settings show a higher number than last in DB, there's a gap
+      if (settings.lastUniquePrefix > lastInDB.prefix) {
+        // Gap right after last DB entry
+        const gapNumber = formatUniqueNumber(lastInDB.prefix + 1, lastInDB.seq + 1);
+        console.log('[checkForGaps] Gap found after last number:', gapNumber);
+        return gapNumber;
+      }
+    }
+
+    console.log('[checkForGaps] No gaps found');
     return null;
 }
 

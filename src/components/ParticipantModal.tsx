@@ -157,8 +157,14 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
           checkForGaps()
         ]).then(([num, gap]) => {
           // Show gap number if exists, otherwise next number
-          setNextUniqueNumber(gap || num);
+          const suggestedNumber = gap || num;
+          setNextUniqueNumber(suggestedNumber);
           setGapNumber(gap);
+          
+          // CRITICAL: If editing participant and moving to active, clear old number to use suggested
+          if (participant) {
+            setFormData(prev => ({ ...prev, uniqueNumber: '' }));
+          }
         }).catch(err => {
           console.error('Failed to get unique number:', err);
         });
@@ -176,7 +182,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         console.error('Error computing dates:', error);
       }
     }
-  }, [formData.medicalDate, suggestedGroup]);
+  }, [formData.medicalDate, suggestedGroup, participant]);
 
   const validateForm = async (): Promise<boolean> => {
     const newErrors: Record<string, string> = {};
@@ -310,7 +316,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         birthPlace: formData.birthPlace.trim(),
         citizenship: formData.citizenship.trim() || 'българско',
         medicalDate: formData.medicalDate,
-        uniqueNumber: formData.uniqueNumber.trim() || undefined
+        uniqueNumber: formData.uniqueNumber.trim() || gapNumber || undefined
       };
 
       if (participant) {
@@ -608,16 +614,15 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   {t('modal.uniqueNumberAuto')}
                 </label>
-                {gapNumber && (
+                {/* Show gap warning only for EDITING participants OR if gap is internal (not just next number) */}
+                {gapNumber && participant && (
                   <div className="mb-2 p-2 bg-amber-50 border border-amber-300 rounded-md">
                     <p className="text-amber-800 text-sm font-medium">
-                      ⚠️ {participant 
-                        ? `Участникът ще получи попълващ номер: ${gapNumber}` 
-                        : t('modal.gapWarning', { number: gapNumber })}
+                      ⚠️ Участникът ще получи попълващ номер: {gapNumber}
                     </p>
                   </div>
                 )}
-                {participant && suggestedGroup?.status === 'active' && nextUniqueNumber && (
+                {participant && suggestedGroup?.status === 'active' && nextUniqueNumber && !gapNumber && (
                   <div className="mb-2 p-2 bg-blue-50 border border-blue-300 rounded-md">
                     <p className="text-blue-800 text-sm font-medium">
                       ℹ️ Преместване в активна група → Уникален номер: <span className="font-bold">{nextUniqueNumber}</span>
