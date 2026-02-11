@@ -9,6 +9,7 @@ import { migrateToLatest, CURRENT_BACKUP_VERSION } from '../utils/migrations/bac
 import { saveFile } from '../utils/fileDownload';
 import { PasswordModal } from './ui/PasswordModal';
 import { AlertModal } from './ui/AlertModal';
+import { AboutModal } from './AboutModal';
 import {
   getActiveGroup,
   closeActiveGroup,
@@ -88,6 +89,9 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
   const [archiveConfirmText, setArchiveConfirmText] = useState('');
   const [showArchiveViewer, setShowArchiveViewer] = useState(false);
   const [restoreGroup, setRestoreGroup] = useState<{ year: number; groupNumber: number } | null>(null);
+  
+  // About Modal state
+  const [showAboutModal, setShowAboutModal] = useState(false);
 
   // Crypto State
   const [cryptoModal, setCryptoModal] = useState<{
@@ -1290,6 +1294,26 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
           </div>
         )}
       </div>
+
+      {/* About / Version Section */}
+      <div className="bg-white p-6 rounded-lg shadow-md border-2 border-blue-200">
+        <button
+          onClick={() => setShowAboutModal(true)}
+          className="w-full flex items-center justify-between py-2 min-h-[44px]"
+        >
+          <div className="flex items-center gap-2">
+            <Info className="w-5 h-5 text-blue-600" strokeWidth={2} />
+            <h3 className="text-lg font-bold text-blue-600">{t('about.title')}</h3>
+          </div>
+          <ChevronRight className="w-6 h-6 text-blue-600" strokeWidth={2} />
+        </button>
+      </div>
+
+      {/* About Modal */}
+      <AboutModal 
+        isOpen={showAboutModal}
+        onClose={() => setShowAboutModal(false)}
+      />
 
       {/* Yearly Archive Modal */}
       {showArchiveModal && (

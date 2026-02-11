@@ -399,4 +399,15 @@ export default {
   // Certificate
   'certificate.generated': 'Certificate generated successfully!',
   'certificate.error': 'Error generating certificate',
+  
+  // About
+  'about.title': 'About',
+  'about.subtitle': 'Certification & Management',
+  'about.version': 'Version',
+  'about.buildDate': 'Build Date',
+  'about.features': 'Key Features',
+  'about.feature1': 'Manage participants and groups',
+  'about.feature2': 'Offline functionality',
+  'about.feature3': 'Export certificates and data',
+  'about.footer': '© 2026 CERTIFY. All rights reserved.',
 };

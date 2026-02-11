@@ -399,4 +399,15 @@ export default {
   // Certificate
   'certificate.generated': 'Сертификатът е генериран успешно!',
   'certificate.error': 'Грешка при генериране на сертификат',
+  
+  // About
+  'about.title': 'За приложението',
+  'about.subtitle': 'Удостоверяване и управление',
+  'about.version': 'Версия',
+  'about.buildDate': 'Дата на компилация',
+  'about.features': 'Основни функции',
+  'about.feature1': 'Управление на участници и групи',
+  'about.feature2': 'Офлайн функционалност',
+  'about.feature3': 'Експорт на удостоверения и данни',
+  'about.footer': '© 2026 CERTIFY. Всички права запазени.',
 };
