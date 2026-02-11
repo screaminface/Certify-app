@@ -192,6 +192,22 @@ export function useParticipants() {
       participantUpdates.medicalDate = updates.medicalDate;
       participantUpdates.courseStartDate = finalCourseStartDate;
       participantUpdates.courseEndDate = finalCourseEndDate;
+      
+      // CRITICAL: If participant is moving to active group and has no unique number, assign one
+      // This handles the case where a participant was in a planned group and is being moved to active
+      if (suggestedGroup?.status === 'active' && !participant.uniqueNumber) {
+        // Check for gaps first
+        const { checkForGaps } = await import('../utils/uniqueNumberUtils');
+        const gapNumber = await checkForGaps();
+        
+        if (gapNumber) {
+          // Use the gap number
+          participantUpdates.uniqueNumber = gapNumber;
+        } else {
+          // Generate next number
+          participantUpdates.uniqueNumber = await generateNextUniqueNumber();
+        }
+      }
     }
 
     // If unique number changed, validate it

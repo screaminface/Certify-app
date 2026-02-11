@@ -515,12 +515,30 @@ export async function syncGroups(): Promise<void> {
     }
   }
   
-  // 5. Enforce Max 2 Planned Groups Rule
+  // 5. Cleanup old planned groups BEFORE active group (if empty)
+  // Planned groups in the past (before active group) with no participants should be removed
+  const finalGroups = await db.groups.toArray();
+  const currentActiveGroup = finalGroups.find(g => g.status === 'active');
+  
+  if (currentActiveGroup) {
+    const oldPlannedGroups = finalGroups.filter(g => 
+      g.status === 'planned' && 
+      g.courseStartDate < currentActiveGroup.courseStartDate &&
+      (participantCounts.get(g.courseStartDate) || 0) === 0
+    );
+    
+    for (const oldGroup of oldPlannedGroups) {
+      console.log(`Removing old empty planned group before active: ${oldGroup.courseStartDate}`);
+      await db.groups.delete(oldGroup.id);
+    }
+  }
+  
+  // 6. Enforce Max 2 Planned Groups Rule (AFTER active group)
   // "Allow planned=2 rule to be soft if participants exist"
   // "Drop farthest unused"
   
-  const finalGroups = await db.groups.toArray();
-  const plannedGroups = finalGroups.filter(g => g.status === 'planned');
+  const refreshedGroups = await db.groups.toArray();
+  const plannedGroups = refreshedGroups.filter(g => g.status === 'planned');
   
   if (plannedGroups.length > 2) {
     // We need to prune.

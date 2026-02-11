@@ -293,7 +293,44 @@ export async function isUniqueNumberAvailable(uniqueNumber: string, excludeId?: 
  * Check for gaps (No-Op for now as gaps are auto-closed on delete)
  */
 export async function checkForGaps(): Promise<string | null> {
-    return null; 
+    // Get all participants with unique numbers
+    const participants = await db.participants.toArray();
+    const numbers = participants
+      .filter(p => p.uniqueNumber)
+      .map(p => parseUniqueNumber(p.uniqueNumber!))
+      .filter((n): n is { prefix: number; seq: number } => n !== null)
+      .sort((a, b) => {
+        if (a.prefix !== b.prefix) return a.prefix - b.prefix;
+        return a.seq - b.seq;
+      });
+
+    if (numbers.length === 0) return null;
+
+    // Check for gaps in the sequence
+    for (let i = 0; i < numbers.length - 1; i++) {
+      const current = numbers[i];
+      const next = numbers[i + 1];
+
+      // Same prefix - check seq continuity
+      if (current.prefix === next.prefix) {
+        if (next.seq - current.seq > 1) {
+          // Gap found! Return the missing number
+          return formatUniqueNumber(current.prefix, current.seq + 1);
+        }
+      } 
+      // Different prefix - check if there's a gap
+      else if (next.prefix - current.prefix > 1) {
+        // Gap in prefix
+        return formatUniqueNumber(current.prefix + 1, current.seq + 1);
+      }
+      // Sequential prefix but need to check seq continuity
+      else if (next.prefix === current.prefix + 1) {
+        // This is normal progression, no gap
+        continue;
+      }
+    }
+
+    return null;
 }
 
 /**
