@@ -537,8 +537,8 @@ export async function syncGroups(): Promise<void> {
   // "Allow planned=2 rule to be soft if participants exist"
   // "Drop farthest unused"
   
-  const refreshedGroups = await db.groups.toArray();
-  const plannedGroups = refreshedGroups.filter(g => g.status === 'planned');
+  const finalRefreshedGroups = await db.groups.toArray();
+  const plannedGroups = finalRefreshedGroups.filter(g => g.status === 'planned');
   
   if (plannedGroups.length > 2) {
     // We need to prune.
