@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "@tauri-apps/tauricon": "^1.0.3"
+  }
+}

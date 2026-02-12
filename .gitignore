@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+target/
+*.log
+.DS_Store
+.env
+.vscode/
+APP/dist/
+APP/node_modules/
+APP/src-tauri/target/
