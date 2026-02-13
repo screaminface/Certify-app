@@ -65,3 +65,22 @@ export function toISODate(date: Date): string {
 export function parseISODate(isoString: string): Date {
   return new Date(isoString);
 }
+
+export function formatDisplayDate(
+  dateValue: string | Date | null | undefined,
+  locale: string,
+  timeZone: string,
+  fallback: string
+): string {
+  if (!dateValue) return fallback;
+
+  const parsed = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+
+  return new Intl.DateTimeFormat(locale, {
+    timeZone,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(parsed);
+}

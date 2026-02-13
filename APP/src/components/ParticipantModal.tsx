@@ -217,14 +217,14 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
     // Validate unique number if manually entered
     if (formData.uniqueNumber) {
       if (!isValidUniqueNumberFormat(formData.uniqueNumber)) {
-        newErrors.uniqueNumber = 'Invalid format. Use NNNN-NNN (e.g., 3532-001)';
+        newErrors.uniqueNumber = t('modal.uniqueNumberInvalid');
       } else {
         const isAvailable = await isUniqueNumberAvailable(
           formData.uniqueNumber, 
           participant?.id
         );
         if (!isAvailable) {
-          newErrors.uniqueNumber = 'This unique number already exists';
+          newErrors.uniqueNumber = t('modal.uniqueNumberExists');
         } else if (gapNumber && !participant) {
           // If there's a gap and user is creating new participant
           // They MUST use the gap number or leave it empty (auto-assign)
@@ -235,7 +235,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
             // Check if the input number is after the gap
             if (inputParsed.prefix > gapParsed.prefix || 
                 (inputParsed.prefix === gapParsed.prefix && inputParsed.seq > gapParsed.seq)) {
-              newErrors.uniqueNumber = `Cannot skip gap! Must fill ${gapNumber} first or leave empty for auto-assign`;
+              newErrors.uniqueNumber = t('modal.cannotSkipGap', { number: gapNumber });
             }
           }
         }
@@ -269,7 +269,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
       if (!isMedicalValidForCourse(formData.medicalDate, selectedGroup!.courseStartDate)) {
         setErrors(prev => ({
           ...prev,
-          medicalDate: 'Медицинският преглед трябва да е преди началото на курса и в рамките на 6 месеца.'
+          medicalDate: t('modal.medicalDateCourseValidation')
         }));
         return;
       }
@@ -278,7 +278,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
       if (!isMedicalValidForCourse(formData.medicalDate, computedDates.courseStartDate)) {
         setErrors(prev => ({
           ...prev,
-          medicalDate: 'Медицинският преглед трябва да е преди началото на курса и в рамките на 6 месеца.'
+          medicalDate: t('modal.medicalDateCourseValidation')
         }));
         return;
       }
@@ -293,7 +293,12 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         const selectedGroup = allGroups?.find(g => g.groupNumber === selectedGroupNum);
         setWarningModal({
           isOpen: true,
-          message: `Предупреждение: Избраната група ${selectedGroupNum} (${formatDateBG(selectedGroup!.courseStartDate)}) не съвпада с препоръчителната група ${suggested.group.groupNumber} (${formatDateBG(suggested.group.courseStartDate)}) за този курсов срок.`,
+          message: t('modal.groupWarningMessage', {
+            selected: String(selectedGroupNum),
+            selectedDate: formatDateBG(selectedGroup!.courseStartDate),
+            suggested: String(suggested.group.groupNumber ?? ''),
+            suggestedDate: formatDateBG(suggested.group.courseStartDate)
+          }),
           onConfirm: () => {
             setWarningModal({ isOpen: false, message: '', onConfirm: () => {} });
             performSave();
@@ -328,7 +333,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
       onClose();
     } catch (error) {
       console.error('Error saving participant:', error);
-      alert(`Failed to save participant: ${(error as Error).message}`);
+      alert(`${t('error.saveFailed')}: ${(error as Error).message}`);
     } finally {
       setIsSubmitting(false);
     }

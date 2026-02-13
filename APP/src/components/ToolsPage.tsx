@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
 import { db, Participant, Group, Settings } from '../db/database';
 import { useSettings } from '../hooks/useSettings';
 import { isUniqueNumberAvailable } from '../utils/uniqueNumberUtils';
@@ -15,6 +14,7 @@ import {
   closeActiveGroup,
   getCompletedGroups,
   getPlannedGroups,
+  createGroup,
   makeGroupActive,
   activateGroupDirectly,
   setActiveToPlanned,
@@ -31,7 +31,17 @@ import { isPinSet } from '../security/pinLock';
 
 interface ToolsPageProps {
   filteredParticipants: Participant[];
-  onNavigateHome?: () => void;
+  entitlement?: {
+    configured: boolean;
+    authenticated: boolean;
+    status: 'active' | 'grace' | 'expired' | 'unknown';
+    readOnly: boolean;
+    planCode: string | null;
+    currentPeriodEnd: string | null;
+    graceUntil: string | null;
+  };
+  entitlementLoading?: boolean;
+  onSignOut?: () => Promise<void>;
 }
 
 interface BackupData {
@@ -42,7 +52,7 @@ interface BackupData {
   settings: Settings;
 }
 
-export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) => {
+export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, entitlement, entitlementLoading = false, onSignOut }) => {
   const { settings } = useSettings();
   const { language, setLanguage, t } = useLanguage();
   const [isImporting, setIsImporting] = useState(false);
@@ -118,6 +128,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
     date: '',
     status: 'planned' as 'active' | 'planned'
   });
+
 
   const handleSecuritySuccess = () => {
       setLockMode(null);
@@ -211,7 +222,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       showAlert(t('common.success'), t('import.success', { participants: String(backup.participants.length), groups: String(backup.groups.length) }), 'success');
     } catch (error) {
       console.error('Import processing failed:', error);
-      showAlert(t('common.error'), `Failed to import: ${(error as Error).message}`, 'error');
+      showAlert(t('common.error'), `${t('import.failed')}: ${(error as Error).message}`, 'error');
     } finally {
       setIsImporting(false);
       setCryptoModal(prev => ({ ...prev, isOpen: false, isProcessing: false, pendingEncryptedData: null, pendingFile: null }));
@@ -253,7 +264,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       setCryptoModal(prev => ({ ...prev, isOpen: false }));
     } catch (error) {
       console.error('Secure export failed:', error);
-      setCryptoModal(prev => ({ ...prev, error: 'Encryption failed. Please try again.' }));
+      setCryptoModal(prev => ({ ...prev, error: t('crypto.encryptionFailed') }));
     } finally {
       setCryptoModal(prev => ({ ...prev, isProcessing: false }));
     }
@@ -289,7 +300,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
         }
       } catch (error) {
         console.error('File parsing failed:', error);
-        showAlert(t('common.error'), 'Invalid file format. Please upload a valid backup JSON.', 'error');
+        showAlert(t('common.error'), t('tools.invalidBackupFormat'), 'error');
         setIsImporting(false);
       }
     };
@@ -331,6 +342,8 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
   // Export Excel
   const handleExportExcel = async () => {
     try {
+      const XLSX = await import('xlsx');
+
       // 1. Fetch all relevant data
       const groups = await db.groups.toArray();
       const participants = filteredParticipants.length > 0 ? filteredParticipants : await db.participants.toArray();
@@ -408,7 +421,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       await saveFile(blob, filename);
     } catch (error) {
       console.error('Excel export failed:', error);
-      showAlert(t('common.error'), 'Failed to export Excel file', 'error');
+      showAlert(t('common.error'), t('export.failedExcel'), 'error');
     }
   };
 
@@ -458,7 +471,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       await saveFile(blob, filename);
     } catch (error) {
       console.error('CSV export failed:', error);
-      showAlert(t('common.error'), 'Failed to export CSV file', 'error');
+      showAlert(t('common.error'), t('export.failedCSV'), 'error');
     }
   };
 
@@ -532,7 +545,10 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       
       // STRICT GUARD: Check if there are any active or planned groups
       const hasActiveGroups = groups.some(g => g.status === 'active');
-      const hasPlannedGroups = groups.some(g => g.status === 'planned');
+      const participantDates = new Set(participants.map(p => p.courseStartDate));
+      const hasPlannedGroups = groups
+        .filter(g => g.status === 'planned')
+        .some(g => participantDates.has(g.courseStartDate));
       
       if (hasActiveGroups || hasPlannedGroups) {
         showAlert(t('common.warning'), t('tools.archiveGuardFail'), 'warning');
@@ -722,7 +738,6 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
         }
       }
 
-      const { createGroup } = await import('../utils/groupUtils');
       await createGroup(createGroupData.date, createGroupData.status);
       
       setShowCreateGroupModal(false);
@@ -827,7 +842,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
             {/* Type to confirm */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Type <code className="bg-slate-200 px-2 py-1 rounded">{activeGroup.groupNumber ? `CLOSE-${activeGroup.groupNumber}` : 'CLOSE'}</code> to confirm:
+                {t('tools.typeToConfirm', { text: activeGroup.groupNumber ? `CLOSE-${activeGroup.groupNumber}` : 'CLOSE' })}: <code className="bg-slate-200 px-2 py-1 rounded">{activeGroup.groupNumber ? `CLOSE-${activeGroup.groupNumber}` : 'CLOSE'}</code>
               </label>
               <input
                 type="text"
@@ -1313,6 +1328,9 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants }) =>
       <AboutModal 
         isOpen={showAboutModal}
         onClose={() => setShowAboutModal(false)}
+        entitlement={entitlement}
+        entitlementLoading={entitlementLoading}
+        onSignOut={onSignOut}
       />
 
       {/* Yearly Archive Modal */}
@@ -1404,7 +1422,8 @@ const YearlyArchiveSection: React.FC<{
   
   // Count groups by status
   const activeGroupsCount = allGroups?.filter(g => g.status === 'active').length || 0;
-  const plannedGroupsCount = allGroups?.filter(g => g.status === 'planned').length || 0;
+  const participantDates = new Set((allParticipants || []).map(p => p.courseStartDate));
+  const plannedGroupsCount = allGroups?.filter(g => g.status === 'planned' && participantDates.has(g.courseStartDate)).length || 0;
   const guardFails = activeGroupsCount > 0 || plannedGroupsCount > 0;
   const isReady = !guardFails;
   
@@ -1476,6 +1495,9 @@ const YearlyArchiveSection: React.FC<{
               <span>{t('tools.archiveNotReady')}</span>
             </p>
           )}
+          <p className="text-[11px] text-slate-500 mt-2">
+            {t('tools.archiveAutoPlannedNote')}
+          </p>
         </div>
       </div>
 
@@ -1527,7 +1549,8 @@ const YearlyArchiveModal: React.FC<{
   
   // Check guard conditions
   const hasActiveGroups = allGroups?.some(g => g.status === 'active') || false;
-  const hasPlannedGroups = allGroups?.some(g => g.status === 'planned') || false;
+  const participantDates = new Set((allParticipants || []).map(p => p.courseStartDate));
+  const hasPlannedGroups = allGroups?.some(g => g.status === 'planned' && participantDates.has(g.courseStartDate)) || false;
   const guardFails = hasActiveGroups || hasPlannedGroups;
   
   const completedGroupsThisYear = allGroups?.filter(g => {
@@ -1817,7 +1840,7 @@ const DangerZoneReset: React.FC<DangerZoneResetProps> = ({ showAlert }) => {
         {/* Type to confirm */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
-            Type <code className="bg-slate-200 px-2 py-1 rounded">{requiredText}</code> to confirm:
+            {t('tools.typeToConfirm', { text: requiredText })}: <code className="bg-slate-200 px-2 py-1 rounded">{requiredText}</code>
           </label>
           <input
             type="text"

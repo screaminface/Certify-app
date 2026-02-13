@@ -13,7 +13,6 @@ import { GroupSection } from "./ui/GroupSection";
 import { ArchivedGroupAccordion } from "./ui/ArchivedGroupAccordion";
 import { formatDateBG } from "../utils/medicalValidation";
 import { AlertModal } from "./ui/AlertModal";
-import { generateCertificate } from "../utils/certificateGenerator";
 import { useLiveQuery } from "dexie-react-hooks";
 
 interface ParticipantCardListProps {
@@ -107,7 +106,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     >();
 
     // 1. Initialize with specific PLANNED groups from DB (to ensure empty ones show up)
-    if (groups) {
+    if (!hasActiveFilters && groups) {
       groups.forEach(g => {
         if (g.status === 'planned') {
           grouped.set(g.courseStartDate, { group: g, participants: [] });
@@ -118,6 +117,10 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     // 2. Distribute participants into groups (including orphans)
     participantsByStatus.planned.forEach((p) => {
       let group = groupMap.get(p.courseStartDate);
+
+      if (group && !grouped.has(p.courseStartDate)) {
+        grouped.set(p.courseStartDate, { group, participants: [] });
+      }
       
       // Handle orphan participants (virtual group)
       if (!group) {
@@ -144,15 +147,17 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
       }
     });
 
-    // Sort by courseStartDate ascending (earliest first) and take only first 2
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(0, 2) // Show only next 2 planned periods
-      .map(([courseStartDate, data]) => ({
+    // Sort by courseStartDate ascending (earliest first)
+    const sorted = Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    const visible = hasActiveFilters ? sorted : sorted.slice(0, 2);
+
+    return visible.map(([courseStartDate, data]) => ({
         courseStartDate,
         ...data,
       }));
-  }, [participantsByStatus.planned, groupMap, groups]);
+  }, [participantsByStatus.planned, groupMap, groups, hasActiveFilters]);
 
   // Group completed participants by courseStartDate for accordion display
   const completedGroupedByDate = useMemo(() => {
@@ -233,7 +238,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     participantsByStatus.active.forEach((p) => activePeriods.add(p.courseStartDate));
     
     // Planned - include groups from DB and groups with participants
-    if (groups) {
+    if (!hasActiveFilters && groups) {
       groups.forEach(g => {
         if (g.status === 'planned') plannedPeriods.add(g.courseStartDate);
       });
@@ -253,7 +258,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         periods: Array.from(activePeriods).sort(),
       },
       planned: {
-        count: Math.min(plannedPeriods.size, 2), // Cap at 2 to match the UI slice
+        count: hasActiveFilters ? plannedPeriods.size : Math.min(plannedPeriods.size, 2), // Cap only when no active filters
         periods: Array.from(plannedPeriods).sort(),
       },
       completed: {
@@ -261,7 +266,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         periods: Array.from(completedPeriods).sort(),
       },
     };
-  }, [participantsByStatus, groups]);
+  }, [participantsByStatus, groups, hasActiveFilters]);
 
   // Auto-expand sections when search/filter results are present
   const prevParticipantsRef = useRef(participants);
@@ -415,6 +420,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
          } as unknown as Group;
       }
       
+      const { generateCertificate } = await import('../utils/certificateGenerator');
       await generateCertificate(participant, group);
       setAlertModal({
         isOpen: true,

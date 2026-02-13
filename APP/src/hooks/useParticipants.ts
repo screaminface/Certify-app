@@ -1,10 +1,24 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { v4 as uuidv4 } from 'uuid';
-import { db, Participant } from '../db/database';
+import { Participant } from '../db/database';
 import { computeCourseDates } from '../utils/dateUtils';
-import { generateNextUniqueNumber, isUniqueNumberAvailable } from '../utils/uniqueNumberUtils';
+import {
+  checkForGaps,
+  generateNextUniqueNumber,
+  isUniqueNumberAvailable,
+  realignUniqueNumbers
+} from '../utils/uniqueNumberUtils';
 import { syncGroups, getSuggestedGroup, createGroup, getActiveGroup, isGroupReadOnly } from '../utils/groupUtils';
 import { isMedicalValidForCourse, MEDICAL_EXPIRED_MESSAGE } from '../utils/medicalValidation';
+import {
+  addParticipantRecord,
+  deleteParticipantRecord,
+  getFirstGroupByCourseStartDate,
+  getGroupsByCourseStartDate,
+  getParticipantById,
+  listParticipantsByCourseStartDate,
+  updateParticipantRecord
+} from '../services/db';
 
 export interface ParticipantInput {
   companyName: string;
@@ -18,9 +32,7 @@ export interface ParticipantInput {
 
 export function useParticipants() {
   // Get all participants
-  const participants = useLiveQuery(() => 
-    db.participants.orderBy('courseStartDate').toArray()
-  );
+  const participants = useLiveQuery(() => listParticipantsByCourseStartDate());
 
   // Add a new participant
   const addParticipant = async (input: ParticipantInput): Promise<Participant> => {
@@ -57,7 +69,7 @@ export function useParticipants() {
     
     // SAFETY NET: Check for completed groups on this date (handling duplicate scenarios)
     // Even if getSuggestedGroup skipped it, we must ensure we don't accidentally write to a date that has a completed group
-    const groupsForDate = await db.groups.where('courseStartDate').equals(finalCourseStartDate).toArray();
+    const groupsForDate = await getGroupsByCourseStartDate(finalCourseStartDate);
     if (groupsForDate.some(g => g.status === 'completed')) {
       throw new Error('Не може да добавяте нови участници към приключила група (периодът е архивиран).');
     }
@@ -119,7 +131,7 @@ export function useParticipants() {
       // completedAt is not set initially (undefined)
     };
 
-    await db.participants.add(participant);
+    await addParticipantRecord(participant);
     
     // Sync groups table to ensure all periods exist
     await syncGroups();
@@ -129,16 +141,13 @@ export function useParticipants() {
 
   // Update a participant
   const updateParticipant = async (id: string, updates: Partial<ParticipantInput> & Partial<Participant>): Promise<void> => {
-    const participant = await db.participants.get(id);
+    const participant = await getParticipantById(id);
     if (!participant) {
       throw new Error('Participant not found');
     }
 
     // Check if participant's period/group is read-only
-    const participantGroup = await db.groups
-      .where('courseStartDate')
-      .equals(participant.courseStartDate)
-      .first();
+    const participantGroup = await getFirstGroupByCourseStartDate(participant.courseStartDate);
     if (isGroupReadOnly(participantGroup)) {
       throw new Error('Не може да редактирате участник от заключена група. Моля отключете групата първо от Tools.');
     }
@@ -197,14 +206,13 @@ export function useParticipants() {
       participantUpdates.courseEndDate = finalCourseEndDate;
       
       // CRITICAL: Handle unique number assignment based on group transition
-      const oldGroup = await db.groups.where('courseStartDate').equals(participant.courseStartDate).first();
+      const oldGroup = await getFirstGroupByCourseStartDate(participant.courseStartDate);
       const oldGroupStatus = oldGroup?.status || 'planned';
       const newGroupStatus = suggestedGroup?.status || 'planned';
       
       // If participant is moving TO active group, always reassign number (gap fill)
       if (newGroupStatus === 'active' && oldGroupStatus !== 'active') {
         // Moving from planned/completed to active - reassign with gap filling
-        const { checkForGaps } = await import('../utils/uniqueNumberUtils');
         const gapNumber = await checkForGaps();
         
         if (gapNumber) {
@@ -268,11 +276,10 @@ export function useParticipants() {
     }
     // Note: We keep completedAt even if participant becomes uncompleted (audit trail)
 
-    await db.participants.update(id, participantUpdates);
+    await updateParticipantRecord(id, participantUpdates);
 
     // If we cleared a unique number (Active→Planned), realign to make it available as gap
     if (shouldRealignAfterUpdate) {
-      const { realignUniqueNumbers } = await import('../utils/uniqueNumberUtils');
       await realignUniqueNumbers(shouldRealignAfterUpdate);
     }
 
@@ -283,15 +290,13 @@ export function useParticipants() {
   // Delete a participant
   const deleteParticipant = async (id: string): Promise<void> => {
     // 1. Get participant before delete to know if we need to realign
-    const participant = await db.participants.get(id);
+    const participant = await getParticipantById(id);
     
     // 2. Delete from DB
-    await db.participants.delete(id);
+    await deleteParticipantRecord(id);
     
     // 3. Realign numbers if they had one
     if (participant && participant.uniqueNumber) {
-        // Dynamic import to avoid circular dependencies if any
-        const { realignUniqueNumbers } = await import('../utils/uniqueNumberUtils');
         await realignUniqueNumbers(participant.uniqueNumber);
     }
     
@@ -301,12 +306,12 @@ export function useParticipants() {
 
   // Reset completed override to use auto-computed value
   const resetCompletedOverride = async (id: string): Promise<void> => {
-    await db.participants.update(id, { completedOverride: null });
+    await updateParticipantRecord(id, { completedOverride: null });
   };
 
   // Get participant by ID
   const getParticipant = async (id: string): Promise<Participant | undefined> => {
-    return db.participants.get(id);
+    return getParticipantById(id);
   };
 
   return {

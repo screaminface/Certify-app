@@ -83,7 +83,7 @@ export const StatsPills: React.FC<StatsPillsProps> = ({
               <div className="flex items-center justify-between mb-0.5">
                 <div>
                   <div className="text-xs uppercase tracking-wide text-indigo-600 font-semibold whitespace-nowrap">{t('participants.totalCourses')}</div>
-                  <div className="text-[9px] text-transparent font-medium mt-0.5 select-none">&nbsp;</div>
+                  <div className="text-[9px] text-slate-500 font-medium mt-0.5">{t('participants.totalCoursesSubtext')}</div>
                 </div>
                 <div className="bg-slate-50 rounded-full p-1">
                   <Layers className="w-3.5 h-3.5 text-indigo-600" strokeWidth={2} />
@@ -152,8 +152,11 @@ export const StatsPills: React.FC<StatsPillsProps> = ({
         
         {/* Total Courses */}
         <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 border-l-4 border-l-indigo-500 hover:shadow-md transition-shadow duration-200 min-h-[120px] flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm uppercase tracking-wide text-indigo-600 font-semibold whitespace-nowrap">{t('participants.totalCourses')}</div>
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <div className="text-base uppercase tracking-wide text-indigo-600 font-semibold whitespace-nowrap">{t('participants.totalCourses')}</div>
+              <div className="text-[10px] text-slate-500 font-medium mt-0.5">{t('participants.totalCoursesSubtext')}</div>
+            </div>
             <div className="bg-slate-50 rounded-full p-2.5">
               <Layers className="w-[18px] h-[18px] text-indigo-600" strokeWidth={2} />
             </div>

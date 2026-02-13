@@ -43,7 +43,7 @@ export const TopBar: React.FC<TopBarProps> = ({ activeTab, onTabChange, onBack }
               CERTIFY
             </h1>
             <p className="text-sm md:text-base text-blue-100">
-              Удостоверяване и управление на обучения
+              {t('nav.subtitle')}
             </p>
           </div>
           

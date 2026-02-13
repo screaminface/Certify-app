@@ -1,20 +1,85 @@
 import React from 'react';
-import { X, Info, Calendar, Package, Users, Activity } from 'lucide-react';
+import { X, Info, Calendar, Package, Users, Activity, CheckCircle2, AlertTriangle, XCircle, HelpCircle, CalendarClock, BadgeCheck } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { formatDisplayDate, toISODate } from '../utils/dateUtils';
 
 interface AboutModalProps {
   isOpen: boolean;
   onClose: () => void;
+  entitlement?: {
+    configured: boolean;
+    authenticated: boolean;
+    status: 'active' | 'grace' | 'expired' | 'unknown';
+    planCode: string | null;
+    currentPeriodEnd: string | null;
+    graceUntil: string | null;
+  };
+  entitlementLoading?: boolean;
+  onSignOut?: () => Promise<void>;
 }
 
-export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
-  const { t } = useLanguage();
+export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, entitlement, entitlementLoading = false, onSignOut }) => {
+  const { t, language } = useLanguage();
   
   if (!isOpen) return null;
 
   // Get version from Vite environment variable
   const appVersion = import.meta.env.VITE_APP_VERSION || '1.0.0';
-  const buildDate = import.meta.env.VITE_BUILD_DATE || new Date().toISOString().split('T')[0];
+  const buildDate = import.meta.env.VITE_BUILD_DATE || toISODate(new Date());
+
+  const formatEntitlementDate = (dateValue: string | null): string => {
+    return formatDisplayDate(
+      dateValue,
+      language === 'bg' ? 'bg-BG' : 'en-GB',
+      'Europe/Sofia',
+      t('tools.notAvailable')
+    );
+  };
+
+  const entitlementStatusText = (() => {
+    const status = entitlement?.status ?? 'unknown';
+    if (status === 'active') return t('tools.subscriptionStatusActive');
+    if (status === 'grace') return t('tools.subscriptionStatusGrace');
+    if (status === 'expired') return t('tools.subscriptionStatusExpired');
+    return t('tools.subscriptionStatusUnknown');
+  })();
+
+  const entitlementStatusClass = (() => {
+    const status = entitlement?.status ?? 'unknown';
+    if (status === 'active') return 'text-emerald-700 bg-emerald-50 border-emerald-200';
+    if (status === 'grace') return 'text-amber-800 bg-amber-50 border-amber-200';
+    if (status === 'expired') return 'text-red-700 bg-red-50 border-red-200';
+    return 'text-slate-700 bg-slate-50 border-slate-200';
+  })();
+
+  const StatusIcon = (() => {
+    const status = entitlement?.status ?? 'unknown';
+    if (status === 'active') return CheckCircle2;
+    if (status === 'grace') return AlertTriangle;
+    if (status === 'expired') return XCircle;
+    return HelpCircle;
+  })();
+
+  const normalizedPlanCode = (() => {
+    const raw = entitlement?.planCode?.trim().toLowerCase();
+    if (!raw) return null;
+    if (raw === 'montly' || raw === 'monthy' || raw.startsWith('mon')) return 'monthly';
+    if (raw.startsWith('year')) return 'yearly';
+    return raw;
+  })();
+
+  const localizedPlanText = (() => {
+    if (!normalizedPlanCode) return t('tools.notAvailable');
+    if (normalizedPlanCode === 'monthly') return t('tools.planMonthly');
+    if (normalizedPlanCode === 'yearly') return t('tools.planYearly');
+    return normalizedPlanCode;
+  })();
+
+  const endDateClass = entitlement?.status === 'expired'
+    ? 'text-red-700'
+    : entitlement?.status === 'grace'
+      ? 'text-amber-800'
+      : 'text-slate-900';
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -53,9 +118,41 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
               <Calendar className="w-5 h-5 text-slate-600" strokeWidth={2} />
               <div>
                 <div className="text-sm font-medium text-slate-700">{t('about.buildDate')}</div>
-                <div className="text-sm text-slate-900">{buildDate}</div>
+                <div className="text-sm text-slate-900">{formatEntitlementDate(buildDate)}</div>
               </div>
             </div>
+
+            {entitlement?.configured && entitlement.authenticated && (
+              <>
+                <div className="border-t border-slate-200 pt-3">
+                  <div className="text-sm font-semibold text-slate-700 mb-2">{t('tools.subscriptionAccount')}</div>
+                  <div className="space-y-1.5 text-sm text-slate-700">
+                    <p className="flex items-center gap-1.5">
+                      <strong>{t('tools.subscriptionStatus')}:</strong>{' '}
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-semibold ${entitlementStatusClass}`}>
+                        <StatusIcon className="w-3.5 h-3.5" strokeWidth={2.5} />
+                        {entitlementStatusText}
+                      </span>
+                    </p>
+                    <p className={`flex items-center gap-1.5 ${endDateClass}`}>
+                      <CalendarClock className="w-4 h-4" strokeWidth={2} />
+                      <span><strong>{t('tools.subscriptionEndsAt')}:</strong> {formatEntitlementDate(entitlement.currentPeriodEnd)}</span>
+                    </p>
+                    {entitlement.status === 'grace' && (
+                      <p className="text-amber-800 flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4" strokeWidth={2} />
+                        <span><strong>{t('tools.graceUntil')}:</strong> {formatEntitlementDate(entitlement.graceUntil)}</span>
+                      </p>
+                    )}
+                    <p className="flex items-center gap-1.5">
+                      <BadgeCheck className="w-4 h-4 text-slate-500" strokeWidth={2} />
+                      <span><strong>{t('tools.subscriptionPlan')}:</strong> {localizedPlanText}</span>
+                    </p>
+                    {entitlementLoading && <p className="text-slate-500">{t('common.loading')}</p>}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Features */}
@@ -86,10 +183,18 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Close Button */}
-        <div className="mt-6">
+        <div className="mt-6 flex gap-3">
+          {entitlement?.configured && entitlement.authenticated && (
+            <button
+              onClick={() => void onSignOut?.()}
+              className="px-4 py-3 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-medium transition-colors"
+            >
+              {t('auth.signOut')}
+            </button>
+          )}
           <button
             onClick={onClose}
-            className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
           >
             {t('common.close')}
           </button>

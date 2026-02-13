@@ -1,4 +1,5 @@
-import { db, Participant } from '../db/database';
+import { Participant } from '../db/database';
+import { getFirstGroupByCourseStartDate, getParticipantById, updateParticipantRecord } from '../services/db';
 
 export interface BulkActionResult {
   success: number;
@@ -18,7 +19,7 @@ export function useBulkActions() {
 
     for (const id of participantIds) {
       try {
-        const participant = await db.participants.get(id);
+        const participant = await getParticipantById(id);
         if (!participant) {
           result.failed++;
           result.errors.push(`Participant ${id} not found`);
@@ -26,7 +27,7 @@ export function useBulkActions() {
         }
 
         // Check if group is locked
-        const group = await db.groups.where('courseStartDate').equals(participant.courseStartDate).first();
+        const group = await getFirstGroupByCourseStartDate(participant.courseStartDate);
         if (group && group.status === 'completed' && group.isLocked) {
           result.failed++;
           result.errors.push(`Participant ${participant.personName} belongs to locked group (${group.courseStartDate})`);
@@ -59,7 +60,7 @@ export function useBulkActions() {
           updates.completedAt = now;
         }
 
-        await db.participants.update(id, updates);
+        await updateParticipantRecord(id, updates);
         result.success++;
       } catch (error) {
         result.failed++;
@@ -77,7 +78,7 @@ export function useBulkActions() {
 
     for (const id of participantIds) {
       try {
-        const participant = await db.participants.get(id);
+        const participant = await getParticipantById(id);
         if (!participant) {
           result.failed++;
           result.errors.push(`Participant ${id} not found`);
@@ -85,7 +86,7 @@ export function useBulkActions() {
         }
 
         // Check if group is locked
-        const group = await db.groups.where('courseStartDate').equals(participant.courseStartDate).first();
+        const group = await getFirstGroupByCourseStartDate(participant.courseStartDate);
         if (group && group.status === 'completed' && group.isLocked) {
           result.failed++;
           result.errors.push(`Participant ${participant.personName} belongs to locked group (${group.courseStartDate})`);
@@ -105,7 +106,7 @@ export function useBulkActions() {
           completedAt: now
         };
 
-        await db.participants.update(id, updates);
+        await updateParticipantRecord(id, updates);
         result.success++;
       } catch (error) {
         result.failed++;

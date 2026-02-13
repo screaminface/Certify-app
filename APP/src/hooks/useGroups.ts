@@ -1,28 +1,26 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, Group } from '../db/database';
+import { Group } from '../db/database';
+import {
+  countParticipantsByCourseStartDate,
+  getGroupByNumber,
+  listGroupsSortedByCourseStartDate
+} from '../services/db';
 
 export function useGroups() {
-  // Get all groups ordered by group number
-  const groups = useLiveQuery(() => 
-    db.groups.orderBy('groupNumber').toArray()
-  );
+  // Get all groups (including planned with null groupNumber)
+  const groups = useLiveQuery(async () => listGroupsSortedByCourseStartDate());
 
   // Get a specific group by number
   const getGroup = async (groupNumber: number): Promise<Group | undefined> => {
-    return db.groups.where('groupNumber').equals(groupNumber).first();
+    return getGroupByNumber(groupNumber);
   };
 
   // Get groups with participant counts
   const getGroupsWithCounts = async (): Promise<Array<Group & { participantCount: number }>> => {
-    const allGroups = await db.groups.orderBy('groupNumber').toArray();
+    const allGroups = await listGroupsSortedByCourseStartDate();
     const groupsWithCounts = await Promise.all(
       allGroups.map(async (group) => {
-        const count = group.groupNumber !== null 
-          ? await db.participants
-              .where('groupNumber')
-              .equals(group.groupNumber)
-              .count()
-          : 0;
+        const count = await countParticipantsByCourseStartDate(group.courseStartDate);
         return { ...group, participantCount: count };
       })
     );

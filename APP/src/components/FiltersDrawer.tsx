@@ -109,7 +109,7 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
       {/* Drawer - Left side on desktop, bottom sheet on mobile */}
       <div
         className={`fixed z-50 bg-white shadow-2xl transition-transform
-          md:top-0 md:left-0 md:h-dvh md:w-[360px] lg:w-[420px] md:max-w-[480px] md:translate-x-0
+          md:top-0 md:left-0 md:bottom-auto md:right-auto md:h-auto md:max-h-[calc(100vh-16px)] md:w-[360px] lg:w-[420px] md:max-w-[480px] md:translate-x-0
           bottom-0 left-0 right-0 max-h-[90vh] rounded-t-3xl md:rounded-none flex flex-col
           ${isOpen ? 'translate-y-0' : 'translate-y-full md:translate-y-0 md:-translate-x-full'}
         `}
@@ -140,7 +140,7 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
         </div>
 
         {/* Content - scrollable with extra padding at bottom for buttons */}
-        <div className="p-4 pb-4 flex-1 overflow-y-auto overscroll-contain">
+        <div className="p-4 pb-4 flex-1 md:flex-none overflow-y-auto overscroll-contain">
           {/* Search */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-slate-700 mb-2">

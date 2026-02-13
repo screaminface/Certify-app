@@ -1,5 +1,25 @@
 import Dexie, { Table } from 'dexie';
 
+export const APP_READ_ONLY_ERROR = 'APP_READ_ONLY_ERROR';
+
+let appReadOnlyMode = false;
+
+export function setAppReadOnlyMode(isReadOnly: boolean) {
+  appReadOnlyMode = isReadOnly;
+}
+
+export function isAppReadOnlyMode() {
+  return appReadOnlyMode;
+}
+
+function throwIfReadOnlyMode() {
+  if (appReadOnlyMode) {
+    const error = new Error('Read-only mode is enabled. Subscription access has expired.');
+    error.name = APP_READ_ONLY_ERROR;
+    throw error;
+  }
+}
+
 export interface Group {
   id: string;
   groupNumber: number | null; // null for planned groups, assigned only when activated
@@ -159,6 +179,18 @@ export class AppDatabase extends Dexie {
         if (group.status === 'planned') {
           group.groupNumber = null;
         }
+      });
+    });
+
+    [this.groups, this.participants, this.settings, this.yearlyArchives].forEach(table => {
+      table.hook('creating', () => {
+        throwIfReadOnlyMode();
+      });
+      table.hook('updating', () => {
+        throwIfReadOnlyMode();
+      });
+      table.hook('deleting', () => {
+        throwIfReadOnlyMode();
       });
     });
   }

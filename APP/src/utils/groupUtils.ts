@@ -1,6 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db, Group } from '../db/database';
 import { computeCourseDates } from './dateUtils';
+import { isMedicalValidForCourse } from './medicalValidation';
+import {
+  assignUniqueNumbersForGroupActivation,
+  clearUniqueNumbersForGroup
+} from './uniqueNumberUtils';
 
 
 /**
@@ -24,7 +29,6 @@ export async function generateUniqueNumbersForGroup(courseStartDate: string): Pr
   const group = await db.groups.where('courseStartDate').equals(courseStartDate).first();
   if (!group) return;
 
-  const { assignUniqueNumbersForGroupActivation } = await import('./uniqueNumberUtils');
   await assignUniqueNumbersForGroupActivation(group.id);
 }
 
@@ -90,9 +94,6 @@ export async function getPlannedGroups(): Promise<Group[]> {
  *    - Else -> Suggest Creation.
  */
 export async function getSuggestedGroup(medicalDate: string): Promise<{ group: Group | null; shouldCreate: boolean; createsForDate?: string }> {
-  const { computeCourseDates } = await import('./dateUtils');
-  const { isMedicalValidForCourse } = await import('./medicalValidation');
-  
   // 1. Calculate strict start date
   const { courseStartDate } = computeCourseDates(medicalDate);
   
@@ -675,8 +676,6 @@ export async function fixGroupDates(groupNumber: number): Promise<void> {
   const medicalDates = participants.map(p => new Date(p.medicalDate));
   const earliestMedical = new Date(Math.min(...medicalDates.map(d => d.getTime())));
 
-  // Import computeCourseDates
-  const { computeCourseDates } = await import('./dateUtils');
   const correctDates = computeCourseDates(earliestMedical.toISOString().split('T')[0]);
 
   // Update group with correct dates
@@ -750,7 +749,6 @@ export async function activateGroupDirectly(groupId: string, moveCurrentToPlanne
         groupNumber: null // Remove groupNumber when moving back to planned
       });
       // Clear unique numbers for participants in the group being deactivated
-      const { clearUniqueNumbersForGroup } = await import('./uniqueNumberUtils');
       await clearUniqueNumbersForGroup(currentActive.courseStartDate);
     }
   }
@@ -785,7 +783,6 @@ export async function activateGroupDirectly(groupId: string, moveCurrentToPlanne
   
   // PRIMARY TRIGGER: Generate unique numbers for participants in this period
   // using the strict global sequence logic
-  const { assignUniqueNumbersForGroupActivation } = await import('./uniqueNumberUtils');
   await assignUniqueNumbersForGroupActivation(groupId);
   
   return { success: true };
@@ -809,7 +806,6 @@ export async function setActiveToPlanned(): Promise<void> {
   });
   
   // Clear unique numbers
-  const { clearUniqueNumbersForGroup } = await import('./uniqueNumberUtils');
   await clearUniqueNumbersForGroup(activeGroup.courseStartDate);
 }
 

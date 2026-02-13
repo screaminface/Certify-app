@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { FormEvent, Suspense, lazy, useState, useMemo, useEffect } from 'react';
 import { useParticipants } from './hooks/useParticipants';
 import { useGroups } from './hooks/useGroups';
 import { useGroupSections } from './hooks/useGroupSections';
@@ -11,26 +11,70 @@ import { TopBar } from './components/TopBar';
 import { StatsPills } from './components/StatsPills';
 import { BottomNav } from './components/BottomNav';
 import { FAB } from './components/FAB';
-import { ToolsPage } from './components/ToolsPage';
 import { Participant } from './db/database';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { useLanguage } from './contexts/LanguageContext';
-import { ensureSingleActiveGroup } from './utils/groupUtils';
+import { ensureSingleActiveGroup, syncGroups } from './utils/groupUtils';
 import { AppLockGate } from './components/security/AppLockGate';
+import { EntitlementProvider, useEntitlement } from './contexts/EntitlementContext';
+
+type Translator = (key: string, params?: Record<string, string>) => string;
+
+const ToolsPage = lazy(() => import('./components/ToolsPage').then(module => ({ default: module.ToolsPage })));
+
+function localizeAuthError(message: string, t: Translator): string {
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes('invalid login credentials')) {
+    return t('auth.invalidCredentials');
+  }
+
+  if (normalized.includes('email not confirmed')) {
+    return t('auth.emailNotConfirmed');
+  }
+
+  if (normalized.includes('too many requests')) {
+    return t('auth.rateLimited');
+  }
+
+  return t('auth.failed');
+}
 
 
 function AppContent() {
   const { t } = useLanguage();
+  const {
+    entitlement,
+    loading: entitlementLoading,
+    signInWithPassword,
+    signOut,
+    requestPasswordReset,
+    updatePassword,
+    recoveryMode,
+    authLinkError,
+    clearAuthLinkError
+  } = useEntitlement();
   const { participants, deleteParticipant } = useParticipants();
   const { groups } = useGroups();
   const { collapsedSections, toggleSection, expandSection, resetToDefaults, setCollapsedState } = useGroupSections();
+  const isReadOnly = entitlement.readOnly;
 
   const [activeTab, setActiveTab] = useState<'participants' | 'tools'>('participants');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingParticipant, setEditingParticipant] = useState<Participant | undefined>();
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
-  const [groupRefreshKey, setGroupRefreshKey] = useState(0);
+  const [groupRefreshKey] = useState(0);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotInfo, setForgotInfo] = useState<string | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
+  const [resetSubmitting, setResetSubmitting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   
   // Ensure data integrity on app startup
   useEffect(() => {
@@ -38,8 +82,6 @@ function AppContent() {
       try {
         console.log("App initializing...");
         await ensureSingleActiveGroup();
-        // Sync groups to fix any missing numbers and ensure future periods exist
-        const { syncGroups } = await import('./utils/groupUtils');
         await syncGroups();
         console.log("App initialization complete.");
       } catch (err) {
@@ -108,13 +150,23 @@ function AppContent() {
   }, [hasActiveFilters]);
 
   // Apply filters
+  const groupsByCourseStartDate = useMemo(() => {
+    return new Map((groups ?? []).map(group => [group.courseStartDate, group]));
+  }, [groups]);
+
+  const selectableGroups = useMemo(() => {
+    return (groups ?? [])
+      .filter(group => group.groupNumber !== null && group.groupNumber !== undefined)
+      .map(group => ({ ...group, groupNumber: group.groupNumber! }));
+  }, [groups]);
+
   const filteredParticipants = useMemo(() => {
     if (!participants) return [];
     const currentYear = new Date().getFullYear();
 
     return participants.filter(p => {
       // Find group for this participant
-      const groupInfo = groups?.find(g => g.courseStartDate === p.courseStartDate);
+      const groupInfo = groupsByCourseStartDate.get(p.courseStartDate);
       
       // Archive filter: only show completed participants from current year
       const completed = p.completedOverride !== null ? p.completedOverride : p.completedComputed;
@@ -167,16 +219,45 @@ function AppContent() {
 
       return true;
     });
-  }, [participants, groups, searchText, selectedGroup, statusFilters, dateRange]);
+  }, [participants, groupsByCourseStartDate, searchText, selectedGroup, statusFilters, dateRange]);
 
   // Compute counters
   const totalParticipants = participants?.length || 0;
   const visibleParticipants = filteredParticipants.length;
   const totalCourses = groups?.length || 0;
   const visibleCourses = useMemo(() => {
-    const uniquePeriods = new Set(filteredParticipants.map(p => p.courseStartDate));
-    return uniquePeriods.size;
-  }, [filteredParticipants]);
+    if (!groups || groups.length === 0) return 0;
+
+    const visiblePeriods = new Set<string>();
+    const groupMap = new Map(groups.map(g => [g.courseStartDate, g]));
+
+    // Always count groups that are represented by currently filtered participants
+    filteredParticipants.forEach(p => {
+      const group = groupMap.get(p.courseStartDate);
+      if (group) {
+        visiblePeriods.add(group.courseStartDate);
+      }
+    });
+
+    // Without active filters, UI shows active section (even if empty) and up to 2 planned groups
+    if (!hasActiveFilters) {
+      groups.forEach(g => {
+        if (g.status === 'active') {
+          visiblePeriods.add(g.courseStartDate);
+        }
+      });
+
+      const plannedDates = groups
+        .filter(g => g.status === 'planned')
+        .map(g => g.courseStartDate)
+        .sort((a, b) => a.localeCompare(b))
+        .slice(0, 2);
+
+      plannedDates.forEach(date => visiblePeriods.add(date));
+    }
+
+    return visiblePeriods.size;
+  }, [groups, filteredParticipants, hasActiveFilters]);
 
   const completedCount = useMemo(() => {
     return filteredParticipants.filter(p => {
@@ -186,13 +267,29 @@ function AppContent() {
   }, [filteredParticipants]);
 
   const handleAddClick = () => {
+    if (isReadOnly) {
+      alert(t('entitlement.readOnlyAction'));
+      return;
+    }
     setEditingParticipant(undefined);
     setIsModalOpen(true);
   };
 
   const handleEditClick = (participant: Participant) => {
+    if (isReadOnly) {
+      alert(t('entitlement.readOnlyAction'));
+      return;
+    }
     setEditingParticipant(participant);
     setIsModalOpen(true);
+  };
+
+  const handleDeleteClick = async (id: string) => {
+    if (isReadOnly) {
+      alert(t('entitlement.readOnlyAction'));
+      return;
+    }
+    await deleteParticipant(id);
   };
 
   const handleModalClose = () => {
@@ -263,11 +360,250 @@ function AppContent() {
     }
   };
 
+  const handleSignIn = async (event: FormEvent) => {
+    event.preventDefault();
+    setAuthError(null);
+
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAuthError(t('auth.required'));
+      return;
+    }
+
+    setForgotInfo(null);
+
+    setAuthSubmitting(true);
+    try {
+      await signInWithPassword(authEmail.trim(), authPassword);
+      setAuthPassword('');
+    } catch (err) {
+      if (err instanceof Error) {
+        setAuthError(localizeAuthError(err.message, t));
+      } else {
+        setAuthError(t('auth.failed'));
+      }
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : t('auth.signOutFailed'));
+    }
+  };
+
+  const handleSendReset = async (event: FormEvent) => {
+    event.preventDefault();
+    setAuthError(null);
+    setForgotInfo(null);
+
+    if (!authEmail.trim()) {
+      setAuthError(t('auth.emailRequired'));
+      return;
+    }
+
+    setAuthSubmitting(true);
+    try {
+      await requestPasswordReset(authEmail.trim());
+      setForgotInfo(t('auth.resetSent'));
+    } catch (err) {
+      if (err instanceof Error) {
+        setAuthError(localizeAuthError(err.message, t));
+      } else {
+        setAuthError(t('auth.failed'));
+      }
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleUpdatePassword = async (event: FormEvent) => {
+    event.preventDefault();
+    setResetError(null);
+
+    if (!resetPassword || !resetPasswordConfirm) {
+      setResetError(t('auth.resetPasswordRequired'));
+      return;
+    }
+
+    if (resetPassword.length < 6) {
+      setResetError(t('auth.resetPasswordTooShort'));
+      return;
+    }
+
+    if (resetPassword !== resetPasswordConfirm) {
+      setResetError(t('auth.resetPasswordsMismatch'));
+      return;
+    }
+
+    setResetSubmitting(true);
+    try {
+      await updatePassword(resetPassword);
+      setResetPassword('');
+      setResetPasswordConfirm('');
+    } catch (err) {
+      if (err instanceof Error) {
+        setResetError(localizeAuthError(err.message, t));
+      } else {
+        setResetError(t('auth.failed'));
+      }
+    } finally {
+      setResetSubmitting(false);
+    }
+  };
+
+  if (recoveryMode) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-xl shadow p-6 space-y-4">
+          <h1 className="text-2xl font-bold text-slate-900">{t('auth.resetTitle')}</h1>
+          <p className="text-sm text-slate-600">{t('auth.resetSubtitle')}</p>
+
+          <form onSubmit={handleUpdatePassword} className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.newPassword')}</label>
+              <input
+                type="password"
+                value={resetPassword}
+                onChange={e => setResetPassword(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={t('auth.passwordPlaceholder')}
+                autoComplete="new-password"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.confirmPassword')}</label>
+              <input
+                type="password"
+                value={resetPasswordConfirm}
+                onChange={e => setResetPasswordConfirm(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={t('auth.passwordPlaceholder')}
+                autoComplete="new-password"
+              />
+            </div>
+
+            {resetError && <p className="text-sm text-red-600">{resetError}</p>}
+
+            <button
+              type="submit"
+              disabled={resetSubmitting}
+              className={`w-full py-2.5 rounded-lg font-medium ${
+                resetSubmitting
+                  ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
+            >
+              {resetSubmitting ? t('common.loading') : t('auth.updatePassword')}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (entitlement.configured && !entitlement.authenticated) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-xl shadow p-6 space-y-4">
+          <h1 className="text-2xl font-bold text-slate-900">{t('auth.title')}</h1>
+          <p className="text-sm text-slate-600">{t('auth.subtitle')}</p>
+
+          <form onSubmit={forgotMode ? handleSendReset : handleSignIn} className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.email')}</label>
+              <input
+                type="email"
+                value={authEmail}
+                onChange={e => setAuthEmail(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={t('auth.emailPlaceholder')}
+                autoComplete="email"
+              />
+            </div>
+
+            {!forgotMode && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.password')}</label>
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={e => setAuthPassword(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder={t('auth.passwordPlaceholder')}
+                  autoComplete="current-password"
+                />
+              </div>
+            )}
+
+            {authError && <p className="text-sm text-red-600">{authError}</p>}
+            {forgotInfo && <p className="text-sm text-emerald-700">{forgotInfo}</p>}
+            {authLinkError && <p className="text-sm text-red-600">{authLinkError}</p>}
+            {entitlement.error && <p className="text-sm text-red-600">{entitlement.error}</p>}
+
+            <button
+              type="submit"
+              disabled={authSubmitting || entitlementLoading}
+              className={`w-full py-2.5 rounded-lg font-medium ${
+                authSubmitting || entitlementLoading
+                  ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
+            >
+              {authSubmitting
+                ? t('common.loading')
+                : forgotMode
+                  ? t('auth.sendReset')
+                  : t('auth.signIn')}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setForgotMode(prev => !prev);
+                setAuthError(null);
+                setForgotInfo(null);
+                clearAuthLinkError();
+              }}
+              className="w-full py-2 text-sm text-blue-700 hover:text-blue-800"
+            >
+              {forgotMode ? t('auth.backToLogin') : t('auth.forgotPassword')}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <AppLockGate>
       {/* Top Bar */}
       <TopBar activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {entitlement.configured && entitlement.authenticated && (entitlement.status === 'grace' || isReadOnly) && (
+        <div className={`border-b ${isReadOnly ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+          <div className="container mx-auto px-4 py-2 text-sm">
+            <div>
+              <p className={`font-medium ${isReadOnly ? 'text-red-700' : 'text-amber-800'}`}>
+                {isReadOnly
+                  ? t('entitlement.readOnlyBannerTitle')
+                  : t('entitlement.graceBannerTitle')}
+              </p>
+              {!isReadOnly && entitlement.daysUntilReadOnly !== null && (
+                <p className="text-amber-700">
+                  {t('entitlement.graceBannerMessage', { days: String(entitlement.daysUntilReadOnly) })}
+                </p>
+              )}
+              {isReadOnly && <p className="text-red-700">{t('entitlement.readOnlyBannerMessage')}</p>}
+              {entitlementLoading && <p className="text-slate-500">{t('common.loading')}</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* Main Content */}
         {activeTab === 'participants' ? (
@@ -290,14 +626,17 @@ function AppContent() {
               statusFilters
             }}
             onRemoveFilter={handleRemoveFilter}
-            groups={groups?.filter(g => g.groupNumber !== null && g.groupNumber !== undefined).map(g => ({...g, groupNumber: g.groupNumber! })) || []}
+            groups={selectableGroups}
           />
 
           {/* Action Buttons - Desktop only */}
           <div className="hidden md:flex flex-wrap gap-3 mb-6">
             <button
               onClick={handleAddClick}
-              className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow font-medium"
+              disabled={isReadOnly}
+              className={`px-6 py-3 rounded-lg shadow font-medium ${
+                isReadOnly ? 'bg-slate-300 text-slate-600 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'
+              }`}
             >
               + {t('participants.add')}
             </button>
@@ -332,7 +671,7 @@ function AppContent() {
                 <ParticipantList
                   participants={filteredParticipants}
                   onEdit={handleEditClick}
-                  onDelete={deleteParticipant}
+                  onDelete={handleDeleteClick}
                   collapsedSections={collapsedSections}
                   toggleSection={toggleSection}
                   expandSection={expandSection}
@@ -348,7 +687,7 @@ function AppContent() {
               <ParticipantCardList
                 participants={filteredParticipants}
                 onEdit={handleEditClick}
-                onDelete={deleteParticipant}
+                onDelete={handleDeleteClick}
                 onSelectionChange={setHasSelection}
                 collapsedSections={collapsedSections}
                 toggleSection={toggleSection}
@@ -360,13 +699,14 @@ function AppContent() {
         </main>
       ) : (
         <main className="container mx-auto px-4 py-6">
-          <ToolsPage 
-            filteredParticipants={filteredParticipants} 
-            onNavigateHome={() => {
-              setGroupRefreshKey(prev => prev + 1);
-              setActiveTab('participants');
-            }}
-          />
+          <Suspense fallback={<div className="text-sm text-slate-500">{t('common.loading')}</div>}>
+            <ToolsPage 
+              filteredParticipants={filteredParticipants} 
+              entitlement={entitlement}
+              entitlementLoading={entitlementLoading}
+              onSignOut={handleSignOut}
+            />
+          </Suspense>
         </main>
       )}
 
@@ -382,7 +722,7 @@ function AppContent() {
         onStatusFilterChange={handleStatusFilterChange}
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
-        groups={groups?.filter(g => g.groupNumber !== null && g.groupNumber !== undefined).map(g => ({...g, groupNumber: g.groupNumber! })) || []}
+        groups={selectableGroups}
         onResetToDefaults={resetToDefaults}
         visibleCount={visibleParticipants}
         totalCount={totalParticipants}
@@ -396,7 +736,7 @@ function AppContent() {
       />
 
       {/* Mobile FAB */}
-      {activeTab === 'participants' && !hasSelection && (
+      {activeTab === 'participants' && !hasSelection && !isReadOnly && (
         <FAB onClick={handleAddClick} />
       )}
 
@@ -412,9 +752,11 @@ function AppContent() {
 
 function App() {
   return (
-    <LanguageProvider>
-      <AppContent />
-    </LanguageProvider>
+    <EntitlementProvider>
+      <LanguageProvider>
+        <AppContent />
+      </LanguageProvider>
+    </EntitlementProvider>
   );
 }
 

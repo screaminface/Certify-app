@@ -8,8 +8,7 @@ import { BulkActionBar } from './ui/BulkActionBar';
 import { GroupSection } from './ui/GroupSection';
 import { ArchivedGroupAccordion } from './ui/ArchivedGroupAccordion';
 import { formatDateBG } from '../utils/medicalValidation';
-import { isGroupReadOnly } from '../utils/groupUtils';
-import { generateCertificate } from '../utils/certificateGenerator';
+import { isGroupReadOnly, syncGroups } from '../utils/groupUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Badge } from './ui/Badge';
 import { AlertModal } from './ui/AlertModal';
@@ -175,7 +174,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     const grouped = new Map<string, { group: Group; participants: Participant[] }>();
     
     // 1. Initialize with specific PLANNED groups from DB
-    if (groups) {
+    if (!hasActiveFilters && groups) {
       groups.forEach(g => {
         if (g.status === 'planned') {
           grouped.set(g.courseStartDate, { group: g, participants: [] });
@@ -186,6 +185,10 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     // 2. Distribute participants
     participantsByStatus.planned.forEach(p => {
       let group = groupMap.get(p.courseStartDate);
+
+      if (group && !grouped.has(p.courseStartDate)) {
+        grouped.set(p.courseStartDate, { group, participants: [] });
+      }
       
       if (!group) {
          if (!grouped.has(p.courseStartDate)) {
@@ -209,14 +212,16 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     });
 
     // Sort by courseStartDate ascending
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(0, 2)
-      .map(([courseStartDate, data]) => ({
+    const sorted = Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    const visible = hasActiveFilters ? sorted : sorted.slice(0, 2);
+
+    return visible.map(([courseStartDate, data]) => ({
         courseStartDate,
         ...data
       }));
-  }, [participantsByStatus.planned, groupMap, groups]);
+  }, [participantsByStatus.planned, groupMap, groups, hasActiveFilters]);
 
   // Group completed participants by courseStartDate
   const completedGroupedByDate = useMemo(() => {
@@ -254,7 +259,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     // The previous logic counted distinct group numbers of participants.
     // Let's count periods from groups + participants.
     // Actually, stick to simple distinct periods from participants + groups logic.
-    if (groups) {
+    if (!hasActiveFilters && groups) {
         groups.forEach(g => {
             if (g.status === 'active') activePeriods.add(g.courseStartDate);
             if (g.status === 'planned') plannedPeriods.add(g.courseStartDate);
@@ -271,13 +276,11 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       planned: { count: plannedPeriods.size, numbers: [] },
       completed: { count: completedPeriods.size, numbers: [] }
     };
-  }, [participantsByStatus, groups, activeGroupedByDate]);
+  }, [participantsByStatus, groups, activeGroupedByDate, hasActiveFilters]);
 
   // Sync group dates with participants on mount
   useEffect(() => {
     const syncAllGroups = async () => {
-      // Use the new syncGroups function which handles everything
-      const { syncGroups } = await import('../utils/groupUtils');
       await syncGroups();
     };
     syncAllGroups();
@@ -314,7 +317,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       setAlertModal({
         isOpen: true,
         title: t('common.error'),
-        message: 'Failed to update participant',
+        message: t('error.updateParticipantFailed'),
         variant: 'error'
       });
     }
@@ -346,7 +349,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       setAlertModal({
         isOpen: true,
         title: t('common.error'),
-        message: 'Failed to update completed status',
+        message: t('error.updateCompletedFailed'),
         variant: 'error'
       });
     }
@@ -374,7 +377,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       setAlertModal({
         isOpen: true,
         title: t('common.error'),
-        message: 'Failed to reset completed status',
+        message: t('error.resetCompletedFailed'),
         variant: 'error'
       });
     }
@@ -408,6 +411,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
          } as Group;
       }
 
+      const { generateCertificate } = await import('../utils/certificateGenerator');
       await generateCertificate(participant, group);
       setAlertModal({
         isOpen: true,
