@@ -42,7 +42,7 @@ function localizeAuthError(message: string, t: Translator): string {
 
 
 function AppContent() {
-  const { t } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   const {
     entitlement,
     loading: entitlementLoading,
@@ -457,7 +457,33 @@ function AppContent() {
   if (recoveryMode) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-        <div className="w-full max-w-md bg-white rounded-xl shadow p-6 space-y-4">
+        <div className="w-full max-w-md bg-white rounded-xl shadow p-6 space-y-4 relative">
+          {/* Language toggle */}
+          <div className="absolute top-4 right-4 flex gap-1">
+            <button
+              type="button"
+              onClick={() => setLanguage('bg')}
+              className={`px-2.5 py-1 text-xs font-medium rounded ${
+                language === 'bg'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              BG
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguage('en')}
+              className={`px-2.5 py-1 text-xs font-medium rounded ${
+                language === 'en'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              EN
+            </button>
+          </div>
+
           <h1 className="text-2xl font-bold text-slate-900">{t('auth.resetTitle')}</h1>
           <p className="text-sm text-slate-600">{t('auth.resetSubtitle')}</p>
 
@@ -508,7 +534,33 @@ function AppContent() {
   if (entitlement.configured && !entitlement.authenticated) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-        <div className="w-full max-w-md bg-white rounded-xl shadow p-6 space-y-4">
+        <div className="w-full max-w-md bg-white rounded-xl shadow p-6 space-y-4 relative">
+          {/* Language toggle */}
+          <div className="absolute top-4 right-4 flex gap-1">
+            <button
+              type="button"
+              onClick={() => setLanguage('bg')}
+              className={`px-2.5 py-1 text-xs font-medium rounded ${
+                language === 'bg'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              BG
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguage('en')}
+              className={`px-2.5 py-1 text-xs font-medium rounded ${
+                language === 'en'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              EN
+            </button>
+          </div>
+
           <h1 className="text-2xl font-bold text-slate-900">{t('auth.title')}</h1>
           <p className="text-sm text-slate-600">{t('auth.subtitle')}</p>
 
