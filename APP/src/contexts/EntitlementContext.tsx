@@ -22,7 +22,7 @@ interface EntitlementContextType {
   loading: boolean;
   recoveryMode: boolean;
   authLinkError: string | null;
-  refresh: () => Promise<void>;
+  refresh: (silent?: boolean) => Promise<void>;
   signInWithPassword: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
@@ -114,7 +114,7 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setAppReadOnlyMode(entitlement.readOnly);
   }, [entitlement.readOnly]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (silent: boolean = false) => {
     if (!supabase) {
       const nextState: EntitlementState = {
         ...defaultState,
@@ -128,7 +128,11 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return;
     }
 
-    setLoading(true);
+    // Only show loading indicator for explicit user actions (not background refresh)
+    if (!silent) {
+      setLoading(true);
+    }
+    
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
@@ -200,14 +204,19 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return;
       }
 
-      setEntitlement(prev => ({
-        ...prev,
-        configured: true,
-        error: message,
-        lastCheckedAt: new Date().toISOString()
-      }));
+      // Only update error state if not silent (to avoid disrupting user during background refresh)
+      if (!silent) {
+        setEntitlement(prev => ({
+          ...prev,
+          configured: true,
+          error: message,
+          lastCheckedAt: new Date().toISOString()
+        }));
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [supabase]);
 
@@ -279,18 +288,32 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   useEffect(() => {
     let isMounted = true;
+    let lastRefreshTimeMs = 0;
 
-    const safeRefresh = async () => {
+    const safeRefresh = async (silent: boolean = false) => {
       if (!isMounted) return;
-      await refresh();
+      await refresh(silent);
+      lastRefreshTimeMs = Date.now();
     };
 
-    safeRefresh();
+    // Initial refresh (visible)
+    safeRefresh(false);
 
-    // Refresh every 2 minutes to ensure fresh entitlement data
+    // Background refresh every 2 minutes (silent, won't disrupt UI)
     const interval = window.setInterval(() => {
-      void safeRefresh();
+      void safeRefresh(true);
     }, 2 * 60 * 1000);
+
+    // Refresh when window gets focus (user returns to app after making changes in Supabase, etc.)
+    // Rate limit: only if last refresh was more than 10 seconds ago
+    const handleWindowFocus = () => {
+      const timeSinceLastRefresh = Date.now() - lastRefreshTimeMs;
+      if (timeSinceLastRefresh > 10_000) {
+        void safeRefresh(true);
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
 
     const {
       data: { subscription }
@@ -303,13 +326,15 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
           if (event === 'SIGNED_OUT') {
             setRecoveryMode(false);
           }
-          void safeRefresh();
+          // Auth state changes should trigger visible refresh
+          void safeRefresh(false);
         })
       : { data: { subscription: { unsubscribe: () => undefined } } };
 
     return () => {
       isMounted = false;
       window.clearInterval(interval);
+      window.removeEventListener('focus', handleWindowFocus);
       subscription.unsubscribe();
     };
   }, [refresh, supabase]);

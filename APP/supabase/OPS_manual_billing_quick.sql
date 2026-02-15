@@ -159,12 +159,25 @@ from app.manual_mark_unpaid(
 
 -- D4) Форсирай незабавно заключване
 -- D4) Force immediate lock
+-- ВАЖНО: За пълно заключване трябва status='expired' И current_period_end да е в миналото
+-- IMPORTANT: For full lock need status='expired' AND current_period_end in the past
 select *
 from app.manual_mark_unpaid(
   'ea4d8b1d-ab2e-461f-b3ed-61b930d42906'::uuid,
   'expired',
   'manual lock'
 );
+
+-- ДОПЪЛНИТЕЛНО: Ако горното не форсира read_only, ръчно сетнете период в миналото:
+-- ADDITIONAL: If above doesn't force read_only, manually set period to past:
+update app.subscriptions
+set status = 'expired',
+    current_period_end = now() - interval '1 day',
+    updated_at = now()
+where tenant_id = 'ea4d8b1d-ab2e-461f-b3ed-61b930d42906'::uuid
+  and provider = 'manual';
+
+select app.refresh_entitlement_for_tenant('ea4d8b1d-ab2e-461f-b3ed-61b930d42906'::uuid);
 
 -- D5) Форсирай read-only за тест (past_due, grace вече е изтекъл)
 -- D5) Force read-only for test (past due, grace already passed)

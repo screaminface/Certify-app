@@ -12,8 +12,15 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => {
-    const saved = localStorage.getItem('app-language');
-    return (saved === 'bg' || saved === 'en') ? saved : 'en';
+    const saved = localStorage.getItem('spi.language');
+    if (saved === 'bg' || saved === 'en') {
+      return saved;
+    }
+    
+    // Auto-detect Bulgarian from browser/system locale
+    const browserLang = navigator.language || navigator.languages?.[0] || 'en';
+    const isBulgarian = browserLang.toLowerCase().startsWith('bg');
+    return isBulgarian ? 'bg' : 'en';
   });
 
   const [translations, setTranslations] = useState<Record<string, string>>({});
@@ -28,7 +35,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem('app-language', lang);
+    localStorage.setItem('spi.language', lang);
   };
 
   const t = (key: string, params?: Record<string, string>): string => {
