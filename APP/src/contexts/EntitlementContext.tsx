@@ -287,9 +287,10 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     safeRefresh();
 
+    // Refresh every 2 minutes to ensure fresh entitlement data
     const interval = window.setInterval(() => {
       void safeRefresh();
-    }, 5 * 60 * 1000);
+    }, 2 * 60 * 1000);
 
     const {
       data: { subscription }
