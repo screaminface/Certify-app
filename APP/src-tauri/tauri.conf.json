@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "CERTIFY",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "identifier": "bg.spi.certify",
   "build": {
     "frontendDist": "../dist",
@@ -19,7 +19,8 @@
         "minHeight": 700,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "userAgent": "CERTIFY/2.0.0"
       }
     ],
     "security": {

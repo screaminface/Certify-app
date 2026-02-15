@@ -1,6 +1,6 @@
 [package]
 name = "certify"
-version = "1.0.0"
+version = "2.0.0"
 description = "CERTIFY - Certification & Management"
 authors = ["SPI"]
 edition = "2021"
