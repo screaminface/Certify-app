@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Info, Calendar, Package, Users, Activity, CheckCircle2, AlertTriangle, XCircle, HelpCircle, CalendarClock, BadgeCheck, RefreshCw } from 'lucide-react';
+import React from 'react';
+import { X, Info, Calendar, Package, Users, Activity, CheckCircle2, AlertTriangle, XCircle, HelpCircle, CalendarClock, BadgeCheck } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { formatDisplayDate, toISODate } from '../utils/dateUtils';
 
@@ -16,24 +16,12 @@ interface AboutModalProps {
   };
   entitlementLoading?: boolean;
   onSignOut?: () => Promise<void>;
-  onRefresh?: () => Promise<void>;
 }
 
-export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, entitlement, entitlementLoading = false, onSignOut, onRefresh }) => {
+export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, entitlement, entitlementLoading = false, onSignOut }) => {
   const { t, language } = useLanguage();
-  const [isRefreshing, setIsRefreshing] = useState(false);
   
   if (!isOpen) return null;
-
-  const handleRefresh = async () => {
-    if (!onRefresh || isRefreshing) return;
-    setIsRefreshing(true);
-    try {
-      await onRefresh();
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
 
   // Get version from Vite environment variable
   const appVersion = import.meta.env.VITE_APP_VERSION || '1.0.0';
