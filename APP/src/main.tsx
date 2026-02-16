@@ -6,7 +6,7 @@ import './index.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Clear localStorage on version change to prevent stale cache issues
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || '2.0.0';
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || '2.1.0';
 const VERSION_KEY = 'spi.app.version';
 
 const storedVersion = localStorage.getItem(VERSION_KEY);

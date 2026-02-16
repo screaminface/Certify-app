@@ -36,6 +36,7 @@ export async function getGlobalMaxUniqueNumber(ignoreSettings: boolean = false):
   const participants = await db.participants.toArray();
   let max: { prefix: number; seq: number } | null = null;
 
+  // Check active participants
   for (const p of participants) {
     if (!p.uniqueNumber) continue;
     const parsed = parseUniqueNumber(p.uniqueNumber);
@@ -47,6 +48,26 @@ export async function getGlobalMaxUniqueNumber(ignoreSettings: boolean = false):
       // Compare: Higher prefix wins, or equal prefix + higher seq
       if (parsed.prefix > max.prefix || (parsed.prefix === max.prefix && parsed.seq > max.seq)) {
         max = parsed;
+      }
+    }
+  }
+
+  // Check yearly archives for maximum numbers
+  const archives = await db.yearlyArchives.toArray();
+  
+  for (const archive of archives) {
+    for (const p of archive.participants) {
+      if (!p.uniqueNumber) continue;
+      const parsed = parseUniqueNumber(p.uniqueNumber);
+      if (!parsed) continue;
+
+      if (!max) {
+        max = parsed;
+      } else {
+        // Compare: Higher prefix wins, or equal prefix + higher seq
+        if (parsed.prefix > max.prefix || (parsed.prefix === max.prefix && parsed.seq > max.seq)) {
+          max = parsed;
+        }
       }
     }
   }
@@ -276,26 +297,51 @@ export async function realignUniqueNumbers(deletedNumber: string): Promise<void>
 }
 
 /**
- * Check if unique number is available
+ * Check if unique number is available (checks both active participants and archives)
  */
 export async function isUniqueNumberAvailable(uniqueNumber: string, excludeId?: string): Promise<boolean> {
+  // Check active participants
   const query = db.participants.where('uniqueNumber').equals(uniqueNumber);
   const existing = await query.toArray();
   
   if (excludeId) {
-    return existing.length === 0 || (existing.length === 1 && existing[0].id === excludeId);
+    const hasConflict = existing.length > 0 && (existing.length > 1 || existing[0].id !== excludeId);
+    if (hasConflict) return false;
+  } else if (existing.length > 0) {
+    return false;
   }
   
-  return existing.length === 0;
+  // Check yearly archives
+  const archives = await db.yearlyArchives.toArray();
+  for (const archive of archives) {
+    for (const p of archive.participants) {
+      if (p.uniqueNumber === uniqueNumber) {
+        if (excludeId && p.id === excludeId) {
+          continue; // This is the same participant being edited
+        }
+        return false; // Number exists in archive
+      }
+    }
+  }
+  
+  return true;
 }
 
 /**
- * Check for gaps (No-Op for now as gaps are auto-closed on delete)
+ * Check for gaps (checks both active participants and archives)
  */
 export async function checkForGaps(): Promise<string | null> {
-    // Get all participants with unique numbers
+    // Get all participants with unique numbers (active + archived)
     const participants = await db.participants.toArray();
-    const numbers = participants
+    const archives = await db.yearlyArchives.toArray();
+    
+    // Combine active participants and archived participants
+    const allParticipants = [...participants];
+    for (const archive of archives) {
+      allParticipants.push(...archive.participants);
+    }
+    
+    const numbers = allParticipants
       .filter(p => p.uniqueNumber)
       .map(p => parseUniqueNumber(p.uniqueNumber!))
       .filter((n): n is { prefix: number; seq: number } => n !== null)
@@ -303,8 +349,6 @@ export async function checkForGaps(): Promise<string | null> {
         if (a.prefix !== b.prefix) return a.prefix - b.prefix;
         return a.seq - b.seq;
       });
-
-    console.log('[checkForGaps] Numbers in DB:', numbers.map(n => formatUniqueNumber(n.prefix, n.seq)));
 
     if (numbers.length === 0) return null;
 
@@ -318,9 +362,7 @@ export async function checkForGaps(): Promise<string | null> {
       // Expected: next.prefix should be current.prefix + 1
       if (next.prefix !== current.prefix + 1) {
         // Gap found! Return the missing number
-        const gapNumber = formatUniqueNumber(current.prefix + 1, current.seq + 1);
-        console.log('[checkForGaps] Gap found between numbers:', gapNumber);
-        return gapNumber;
+        return formatUniqueNumber(current.prefix + 1, current.seq + 1);
       }
     }
 
@@ -328,20 +370,15 @@ export async function checkForGaps(): Promise<string | null> {
     // This happens when the last participant was deleted/moved to planned
     // Settings would be updated to the new max, but there's a gap before the next generated number
     const settings = await db.settings.get(1);
-    console.log('[checkForGaps] Settings:', settings ? `${settings.lastUniquePrefix}-${settings.lastUniqueSeq}` : 'none');
     if (settings && numbers.length > 0) {
       const lastInDB = numbers[numbers.length - 1];
-      console.log('[checkForGaps] Last in DB:', formatUniqueNumber(lastInDB.prefix, lastInDB.seq));
       // If settings show a higher number than last in DB, there's a gap
       if (settings.lastUniquePrefix > lastInDB.prefix) {
         // Gap right after last DB entry
-        const gapNumber = formatUniqueNumber(lastInDB.prefix + 1, lastInDB.seq + 1);
-        console.log('[checkForGaps] Gap found after last number:', gapNumber);
-        return gapNumber;
+        return formatUniqueNumber(lastInDB.prefix + 1, lastInDB.seq + 1);
       }
     }
 
-    console.log('[checkForGaps] No gaps found');
     return null;
 }
 
