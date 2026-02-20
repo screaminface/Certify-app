@@ -1,0 +1,36 @@
+{
+  "name": "certify-admin-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:android": "set CAPACITOR_PLATFORM=android&& tsc && vite build",
+    "preview": "vite preview",
+    "android:sync": "npm run build:android && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:build:debug": "npm run android:sync && cd android && gradlew assembleDebug && cd .. && powershell -Command \"$version = (Get-Content package.json | ConvertFrom-Json).version; Copy-Item android/app/build/outputs/apk/debug/app-debug.apk -Destination releases/CERTIFY-ADMIN-v$version.apk\"",
+    "android:build": "npm run android:build:debug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@supabase/supabase-js": "^2.95.3",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.1"
+  }
+}
