@@ -37,17 +37,6 @@ export function useAdminActions() {
       throw error
     }
 
-    // Also set period to past to ensure immediate lock
-    await supabase
-      .from('subscriptions')
-      .update({
-        status: 'expired',
-        current_period_end: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-        updated_at: new Date().toISOString(),
-      })
-      .eq('tenant_id', tenantId)
-      .eq('provider', 'manual')
-
     // Refresh entitlement
     await supabase.rpc('refresh_entitlement_for_tenant', {
       p_tenant_id: tenantId,
@@ -57,36 +46,29 @@ export function useAdminActions() {
     return data
   }
 
-  const ole.log('🟣 Switching plan:', { tenantId, newPlan })
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .update({
-        plan_code: newPlan,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('tenant_id', tenantId)
-      .eq('provider', 'manual')
-      .select()
+  const unlockTenant = async (tenantId: string, plan: 'monthly' | 'yearly') => {
+    // Unlock = extend by 30 days
+    console.log('🟢 Unlocking tenant:', tenantId)
+    return extendSubscription(tenantId, plan, 30)
+  }
 
-    if (error) {
-      console.error('❌ Switch plan error:', error)
-      alert(`Failed to switch plan: ${error.message}`)
-      throw error
+  const switchPlan = async (tenantId: string, newPlan: 'monthly' | 'yearly') => {
+    console.log('🟣 Switching plan:', { tenantId, newPlan })
+    
+    // Use RPC instead of direct table access
+    const { error: rpcError } = await supabase.rpc('admin_switch_plan', {
+      p_tenant_id: tenantId,
+      p_new_plan: newPlan,
+    })
+
+    if (rpcError) {
+      console.error('❌ Switch plan error:', rpcError)
+      alert(`Failed to switch plan: ${rpcError.message}`)
+      throw  rpcError
     }
 
-    // Refresh entitlement
-    await supabase.rpc('refresh_entitlement_for_tenant', {
-      p_tenant_id: tenantId,
-    })
-
-    console.log('✅ Switched plan successfully')    if (error) throw error
-
-    // Refresh entitlement
-    await supabase.rpc('refresh_entitlement_for_tenant', {
-      p_tenant_id: tenantId,
-    })
-
-    return data
+    console.log('✅ Switched plan successfully')
+    return { success: true }
   }
 
   return {
