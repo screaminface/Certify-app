@@ -22,7 +22,7 @@ where code = 'spi-demo';
 -- A2) Find auth user by email (for membership management)
 select id, email, created_at
 from auth.users
-where email ilike 'owner@example.com';
+where email ilike 'ventsi.vutov@gmail.com';
 
 -- A3) Списък memberships за tenant
 -- A3) List memberships for tenant
@@ -384,7 +384,7 @@ select
 from app.memberships m
 left join app.profiles p on p.user_id = m.user_id
 where m.user_id = (
-  select id from auth.users where email = 'owner@example.com'
+  select id from auth.users where email = 'ventsi.vutov@gmail.com'
 )
 order by m.created_at asc;
 

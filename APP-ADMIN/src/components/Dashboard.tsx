@@ -30,15 +30,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     setRefreshing(true)
     try {
       const { data, error } = await supabase
-        .from('tenants')
-        .select(`
-          id,
-          code,
-          name,
-          subscriptions!left(plan_code, status, current_period_end),
-          entitlements!left(status, grace_until, read_only)
-        `)
-        .order('name', { ascending: true })
+        .rpc('admin_get_all_tenants')
 
       if (error) throw error
 
@@ -46,12 +38,12 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         id: t.id,
         code: t.code,
         name: t.name,
-        plan_code: t.subscriptions?.[0]?.plan_code || 'monthly',
-        subscription_status: t.subscriptions?.[0]?.status || 'expired',
-        current_period_end: t.subscriptions?.[0]?.current_period_end || null,
-        entitlement_status: t.entitlements?.[0]?.status || 'expired',
-        grace_until: t.entitlements?.[0]?.grace_until || null,
-        read_only: t.entitlements?.[0]?.read_only ?? true,
+        plan_code: t.plan_code || 'monthly',
+        subscription_status: t.subscription_status || 'expired',
+        current_period_end: t.current_period_end || null,
+        entitlement_status: t.entitlement_status || 'expired',
+        grace_until: t.grace_until || null,
+        read_only: t.read_only ?? true,
       }))
 
       setTenants(formatted)
