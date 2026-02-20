@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { User } from '@supabase/supabase-js'
-import { LogOut, RefreshCw } from 'lucide-react'
+import { LogOut, RefreshCw, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import TenantList from './TenantList'
+import CreateTenantModal from './CreateTenantModal'
 
 interface DashboardProps {
   user: User
@@ -26,6 +27,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   const loadTenants = async () => {
     setRefreshing(true)
@@ -100,6 +102,14 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                 <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin text-blue-600' : ''}`} />
               </button>
               <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center space-x-2 px-4 sm:px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:shadow-lg transition-all hover:scale-105 active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">Add Tenant</span>
+                <span className="sm:hidden">Add</span>
+              </button>
+              <button
                 onClick={onLogout}
                 className="flex items-center space-x-2 px-4 sm:px-5 py-2.5 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all hover:scale-105 active:scale-95"
               >
@@ -143,6 +153,14 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           <TenantList tenants={tenants} onRefresh={loadTenants} />
         )}
       </div>
+
+      {/* Create Tenant Modal */}
+      {showCreateModal && (
+        <CreateTenantModal
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={loadTenants}
+        />
+      )}
     </div>
   )
 }
