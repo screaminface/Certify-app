@@ -1,8 +1,9 @@
 -- ===============================================
--- Admin function: Create new tenant (company client)
+-- Admin function: Create tenant with owner user
 -- ===============================================
 
-CREATE OR REPLACE FUNCTION public.admin_create_tenant(
+CREATE OR REPLACE FUNCTION public.admin_create_tenant_with_user(
+  p_user_id uuid,
   p_tenant_name text,
   p_tenant_code text,
   p_owner_email text,
@@ -23,12 +24,25 @@ BEGIN
     RAISE EXCEPTION 'Tenant code "%" already exists', p_tenant_code;
   END IF;
 
-  -- 2) Create tenant
+  -- 2) Verify user exists
+  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = p_user_id) THEN
+    RAISE EXCEPTION 'User not found';
+  END IF;
+
+  -- 3) Create tenant
   INSERT INTO app.tenants (code, name, is_active)
   VALUES (p_tenant_code, p_tenant_name, true)
   RETURNING id INTO v_tenant_id;
 
-  -- 3) Create subscription (manual)
+  -- 4) Create profile for owner
+  INSERT INTO app.profiles (user_id, email, display_name, locale)
+  VALUES (p_user_id, p_owner_email, p_tenant_name, 'bg');
+
+  -- 5) Create membership (owner role)
+  INSERT INTO app.memberships (tenant_id, user_id, role, is_active)
+  VALUES (v_tenant_id, p_user_id, 'owner', true);
+
+  -- 6) Create subscription (manual)
   INSERT INTO app.subscriptions (
     tenant_id,
     provider,
@@ -47,10 +61,10 @@ BEGIN
   )
   RETURNING id INTO v_subscription_id;
 
-  -- 4) Create entitlement
+  -- 7) Create entitlement
   v_entitlement := app.refresh_entitlement_for_tenant(v_tenant_id);
 
-  -- 5) Return success
+  -- 8) Return success
   RETURN json_build_object(
     'success', true,
     'tenant_id', v_tenant_id,
@@ -71,13 +85,17 @@ EXCEPTION
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.admin_create_tenant(text, text, text, text, int) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.admin_create_tenant_with_user(uuid, text, text, text, text, int) TO authenticated, anon;
 
--- Usage: Create new tenant (company) with initial subscription
--- SELECT public.admin_create_tenant(
---   'My Security Company Ltd',
---   'my-security-co',
---   'contact@security-co.com',
---   'monthly',
---   30
--- );
+-- Usage: First create user with Admin API, then create tenant structure
+-- Example from React:
+-- const { data: user } = await adminClient.auth.admin.createUser({ email, password })
+-- await supabase.rpc('admin_create_tenant_with_user', {
+--   p_user_id: user.user.id,
+--   p_tenant_name: 'My Company',
+--   p_tenant_code: 'my-company',
+--   p_owner_email: 'owner@company.com',
+--   p_plan_code: 'monthly',
+--   p_days: 30
+-- })
+

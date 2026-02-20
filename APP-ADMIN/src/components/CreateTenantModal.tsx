@@ -1,6 +1,18 @@
 import { useState } from 'react'
-import { X, Plus, Building2, Mail, Code, Calendar } from 'lucide-react'
+import { X, Plus, Building2, Mail, Lock, Code, Calendar } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// Admin client with service role for user creation
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY
+
+const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+})
 
 interface CreateTenantModalProps {
   onClose: () => void
@@ -12,6 +24,7 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
     name: '',
     code: '',
     email: '',
+    password: '',
     plan: 'monthly' as 'monthly' | 'yearly',
     days: 30
   })
@@ -24,9 +37,41 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
     setError('')
 
     try {
-      console.log('🔵 Creating tenant company...')
+      // Validation
+      if (formData.password.length < 8) {
+        throw new Error('Паролата трябва да е поне 8 символа')
+      }
 
-      const { data, error: rpcError } = await supabase.rpc('admin_create_tenant', {
+      console.log('🔵 Step 1: Creating owner user...')
+      
+      // Step 1: Create auth user (admin API - no email confirmation needed)
+      const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
+        email: formData.email,
+        password: formData.password,
+        email_confirm: true, // Auto-confirm email
+        user_metadata: {
+          tenant_code: formData.code,
+          tenant_name: formData.name
+        }
+      })
+
+      if (authError) {
+        if (authError.message.includes('already registered') || authError.message.includes('User already registered')) {
+          throw new Error(`Email ${formData.email} вече е регистриран`)
+        }
+        throw authError
+      }
+
+      if (!authData.user) {
+        throw new Error('Failed to create user')
+      }
+
+      console.log('🟢 User created:', authData.user.id)
+      console.log('🔵 Step 2: Creating tenant structure...')
+
+      // Step 2: Create tenant + subscription + profile + membership
+      const { data, error: rpcError } = await supabase.rpc('admin_create_tenant_with_user', {
+        p_user_id: authData.user.id,
         p_tenant_name: formData.name,
         p_tenant_code: formData.code,
         p_owner_email: formData.email,
@@ -42,8 +87,8 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
         throw new Error(result.error || 'Failed to create tenant')
       }
 
-      console.log('🟢 Tenant company created successfully!')
-      alert(`✅ Компания създадена успешно!\n\n🏢 Код: ${result.tenant_code}\n📧 Контакт: ${formData.email}\n📅 План: ${result.plan} (${result.days} дни)\n\n✨ Тенантът вече може да ползва вашия апп!`)
+      console.log('🟢 Tenant created successfully!')
+      alert(`✅ Фирма създадена успешно!\n\n🏢 Име: ${formData.name}\n🔑 Код: ${formData.code}\n\n📧 Login Email: ${formData.email}\n🔐 Парола: ${formData.password}\n\n📅 План: ${result.plan} (${result.days} дни)\n\n✨ Собственикът може да влезе в CERTIFY апп!`)
       onSuccess()
       onClose()
     } catch (err: any) {
@@ -53,6 +98,10 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
       // Friendly error messages
       if (errorMsg.includes('already exists')) {
         errorMsg = `Tenant код "${formData.code}" вече съществува`
+      } else if (errorMsg.includes('already registered')) {
+        errorMsg = `Email ${formData.email} вече е регистриран`
+      } else if (errorMsg.includes('Password')) {
+        errorMsg = 'Паролата трябва да е поне 8 символа'
       }
       
       setError(errorMsg)
@@ -122,7 +171,7 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
           <div>
             <label className="flex items-center space-x-2 text-sm font-bold text-gray-700 mb-2">
               <Mail className="w-4 h-4" />
-              <span>Контактен Email</span>
+              <span>Owner Email (за login)</span>
             </label>
             <input
               type="email"
@@ -132,7 +181,25 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
               placeholder="owner@company.com"
               required
             />
-            <p className="text-xs text-gray-500 mt-1">За връзка с клиента (не се използва за login)</p>
+            <p className="text-xs text-gray-500 mt-1">Email за влизане в CERTIFY апп</p>
+          </div>
+
+          {/* Password */}
+          <div>
+            <label className="flex items-center space-x-2 text-sm font-bold text-gray-700 mb-2">
+              <Lock className="w-4 h-4" />
+              <span>Парола за owner</span>
+            </label>
+            <input
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+              placeholder="••••••••"
+              minLength={8}
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">Минимум 8 символа</p>
           </div>
 
           {/* Plan */}
