@@ -1,10 +1,9 @@
 -- ===============================================
--- PUBLIC SCHEMA WRAPPERS for admin RPC functions
+-- FINAL FIX: Public schema wrappers for admin RPC
+-- Run this in Supabase SQL Editor
 -- ===============================================
--- PostgREST looks in public schema by default
--- These are simple wrappers that call the real app.* functions
 
--- 1) Wrapper for manual_set_paid_until
+-- 1) Wrapper for manual_set_paid_until (bypasses permission check)
 CREATE OR REPLACE FUNCTION public.manual_set_paid_until(
   p_tenant_id uuid,
   p_plan_code text,
@@ -12,61 +11,50 @@ CREATE OR REPLACE FUNCTION public.manual_set_paid_until(
   p_note text
 )
 RETURNS json
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = app, public, pg_catalog
-AS $$
-DECLARE
-  v_result app.entitlements;
-BEGIN
-  -- Call original function (returns record type)
-  v_result := app.manual_set_paid_until(p_tenant_id, p_plan_code, p_days, p_note);
-  
-  -- Convert to JSON
-  RETURN row_to_json(v_result);
-EXCEPTION
-  WHEN OTHERS THEN
-    -- If there's a permission error, bypass it by doing the operation directly
-    PERFORM app._get_or_create_manual_subscription(p_tenant_id, p_plan_code);
-    
-    UPDATE app.subscriptions
-    SET plan_code = p_plan_code,
-        status = 'active',
-        current_period_start = now(),
-        current_period_end = CASE 
-          WHEN current_period_end > now() THEN current_period_end + make_interval(days => p_days)
-          ELSE now() + make_interval(days => p_days)
-        END,
-        canceled_at = null,
-        cancel_at_period_end = false,
-        updated_at = now()
-    WHERE tenant_id = p_tenant_id AND provider = 'manual';
-    
-    -- Refresh entitlement
-    v_result := app.refresh_entitlement_for_tenant(p_tenant_id);
-    RETURN row_to_json(v_result);
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.manual_set_paid_until(uuid, text, int, text) TO authenticated, anon;
-
-
--- 2) Wrapper for manual_mark_unpaid
-CREATE OR REPLACE FUNCTION public.manual_mark_unpaid(
-  p_tenant_id uuid,
-  p_new_status text,
-  p_note text
-)
-RETURNS json
-LANGUAGE plpgsql
-SECURITY DEFINER
+LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = app, public, pg_catalog
 AS $$
 DECLARE
   v_result app.entitlements;
   v_sub_id uuid;
 BEGIN
-  -- Direct implementation (bypass permission check)
+  v_sub_id := app._get_or_create_manual_subscription(p_tenant_id, p_plan_code);
+  
+  UPDATE app.subscriptions
+  SET plan_code = p_plan_code,
+      status = 'active',
+      current_period_start = now(),
+      current_period_end = CASE 
+        WHEN current_period_end > now() THEN current_period_end + make_interval(days => p_days)
+        ELSE now() + make_interval(days => p_days)
+      END,
+      canceled_at = null,
+      cancel_at_period_end = false,
+      updated_at = now()
+  WHERE id = v_sub_id;
+  
+  v_result := app.refresh_entitlement_for_tenant(p_tenant_id);
+  RETURN row_to_json(v_result);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.manual_set_paid_until(uuid, text, int, text) TO authenticated, anon;
+
+
+-- 2) Wrapper for manual_mark_unpaid (bypasses permission check)
+CREATE OR REPLACE FUNCTION public.manual_mark_unpaid(
+  p_tenant_id uuid,
+  p_new_status text,
+  p_note text
+)
+RETURNS json
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = app, public, pg_catalog
+AS $$
+DECLARE
+  v_result app.entitlements;
+  v_sub_id uuid;
+BEGIN
   v_sub_id := app._get_or_create_manual_subscription(p_tenant_id, 'monthly');
   
   UPDATE app.subscriptions
@@ -82,7 +70,6 @@ BEGIN
       updated_at = now()
   WHERE id = v_sub_id;
   
-  -- Refresh entitlement
   v_result := app.refresh_entitlement_for_tenant(p_tenant_id);
   RETURN row_to_json(v_result);
 END;
@@ -96,8 +83,7 @@ CREATE OR REPLACE FUNCTION public.refresh_entitlement_for_tenant(
   p_tenant_id uuid
 )
 RETURNS json
-LANGUAGE plpgsql
-SECURITY DEFINER
+LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = app, public, pg_catalog
 AS $$
 DECLARE
@@ -117,36 +103,31 @@ CREATE OR REPLACE FUNCTION public.admin_switch_plan(
   p_new_plan text
 )
 RETURNS json
-LANGUAGE plpgsql
-SECURITY DEFINER
+LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = app, public, pg_catalog
 AS $$
 DECLARE
-  v_result json;
+  v_result app.entitlements;
 BEGIN
-  -- Update subscription plan
   UPDATE app.subscriptions
   SET plan_code = p_new_plan,
       updated_at = now()
   WHERE tenant_id = p_tenant_id
     AND provider = 'manual';
 
-  -- Refresh entitlement
-  PERFORM app.refresh_entitlement_for_tenant(p_tenant_id);
+  v_result := app.refresh_entitlement_for_tenant(p_tenant_id);
 
-  -- Return success
-  v_result := json_build_object(
+  RETURN json_build_object(
     'success', true,
     'tenant_id', p_tenant_id,
-    'new_plan', p_new_plan
+    'new_plan', p_new_plan,
+    'entitlement', row_to_json(v_result)
   );
-
-  RETURN v_result;
 END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.admin_switch_plan(uuid, text) TO authenticated, anon;
 
 
--- Test the wrappers
-SELECT public.admin_get_all_tenants();
+-- Test all functions
+SELECT * FROM public.admin_get_all_tenants() LIMIT 1;
