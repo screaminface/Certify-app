@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface FiltersDrawerProps {
@@ -44,6 +44,36 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
   totalCount
 }) => {
   const { t } = useLanguage();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const pollingIntervalRef = useRef<number | null>(null);
+  
+  // Poll input value continuously when drawer is open (fixes Android IME)
+  useEffect(() => {
+    if (!isOpen) {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      return;
+    }
+    
+    // Check input value every 100ms to catch IME composition changes
+    pollingIntervalRef.current = window.setInterval(() => {
+      if (searchInputRef.current) {
+        const currentValue = searchInputRef.current.value;
+        if (currentValue !== searchText) {
+          onSearchTextChange(currentValue);
+        }
+      }
+    }, 100);
+    
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [isOpen, searchText, onSearchTextChange]);
   
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') onClose();
@@ -147,7 +177,10 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
               {t('filters.search')}
             </label>
             <input
-              type="text"
+              ref={searchInputRef}
+              type="search"
+              inputMode="search"
+              autoComplete="off"
               value={searchText}
               onChange={(e) => onSearchTextChange(e.target.value)}
               onKeyDown={handleKeyDown}

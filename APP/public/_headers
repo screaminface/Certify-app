@@ -1,0 +1,25 @@
+# Security Headers for GitHub Pages Deployment
+# This file configures Content Security Policy and other security headers
+
+/*
+  # Content Security Policy (CSP)
+  # Prevents XSS attacks by controlling which resources can be loaded
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co https://*.supabase.in; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+
+  # Prevent clickjacking attacks
+  X-Frame-Options: DENY
+  
+  # Prevent MIME type sniffing
+  X-Content-Type-Options: nosniff
+  
+  # Enable XSS protection (legacy browsers)
+  X-XSS-Protection: 1; mode=block
+  
+  # Control referrer information
+  Referrer-Policy: strict-origin-when-cross-origin
+  
+  # Force HTTPS (if served over HTTPS)
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  
+  # Feature Policy / Permissions Policy
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()

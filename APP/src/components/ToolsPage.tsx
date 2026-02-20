@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { db, Participant, Group, Settings } from '../db/database';
 import { useSettings } from '../hooks/useSettings';
-import { isUniqueNumberAvailable } from '../utils/uniqueNumberUtils';
 import { formatDateBG } from '../utils/medicalValidation';
 import { encryptBackupJson, decryptBackupJson, isEncryptedBackup, EncryptedBackup } from '../utils/cryptoUtils';
 import { migrateToLatest, CURRENT_BACKUP_VERSION } from '../utils/migrations/backupMigration';
@@ -179,7 +178,10 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
           }
         });
       } else {
-        // Merge
+        // Merge - Load existing unique numbers BEFORE transaction (Android WebView fix)
+        const existingParticipants = await db.participants.toArray();
+        const usedUniqueNumbers = new Set(existingParticipants.map(p => p.uniqueNumber));
+        
         await db.transaction('rw', [db.participants, db.groups, db.settings], async () => {
           // Import groups first (bulkPut handles existing/new)
           if (backup.groups.length > 0) {
@@ -196,8 +198,8 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
               let uniqueNumber = participant.uniqueNumber;
               let attempts = 0;
               
-              // We check availability against the CURRENT transaction state
-              while (!(await isUniqueNumberAvailable(uniqueNumber)) && attempts < 1000) {
+              // Check against pre-loaded Set (no nested queries in transaction)
+              while (usedUniqueNumbers.has(uniqueNumber) && attempts < 1000) {
                 const currentSettings = await db.settings.get(1);
                 if (currentSettings) {
                   const newPrefix = currentSettings.lastUniquePrefix + 1;
@@ -211,6 +213,9 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
                 attempts++;
               }
 
+              // Add to Set to track new additions within transaction
+              usedUniqueNumbers.add(uniqueNumber);
+              
               await db.participants.add({
                 ...participant,
                 uniqueNumber
@@ -1230,8 +1235,6 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
           </div>
         )}
       </div>
-
-
 
       {/* Security Settings */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 mb-6">

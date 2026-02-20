@@ -166,7 +166,9 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
        }
     });
     
-    return Array.from(grouped.values()).sort((a,b) => a.group.courseStartDate.localeCompare(b.group.courseStartDate));
+    // Sort by date (participants already sorted by user's sortBy/sortDirection choice)
+    return Array.from(grouped.values())
+      .sort((a,b) => a.group.courseStartDate.localeCompare(b.group.courseStartDate));
   }, [participantsByStatus.active, groups, groupMap]);
 
   // Group planned participants by courseStartDate
@@ -217,9 +219,11 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
 
     const visible = hasActiveFilters ? sorted : sorted.slice(0, 2);
 
+    // Sort participants by createdAt desc (newest first) - no sort controls in planned section
     return visible.map(([courseStartDate, data]) => ({
         courseStartDate,
-        ...data
+        ...data,
+        participants: data.participants.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       }));
   }, [participantsByStatus.planned, groupMap, groups, hasActiveFilters]);
 

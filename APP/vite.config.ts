@@ -2,12 +2,22 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// Use relative path for Tauri desktop, GitHub Pages path for web
+// Use relative path for Tauri desktop and Capacitor mobile, GitHub Pages path for web
 const isDesktop = process.env.TAURI_ENV_PLATFORM !== undefined;
+const isMobile = process.env.CAPACITOR_PLATFORM !== undefined;
+const isGitHubPages = process.env.GITHUB_PAGES === 'true';
 
 export default defineConfig({
-  base: isDesktop ? './' : '/Certify-app/',
+  base: (isDesktop || isMobile) ? './' : (isGitHubPages ? '/Certify-app/' : './'),
   build: {
+    sourcemap: false, // Disable source maps in production for security
+    minify: 'terser', // Use Terser for advanced minification
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove all console.* calls in production
+        drop_debugger: true,
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -71,6 +81,9 @@ export default defineConfig({
         ]
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         runtimeCaching: [
           {

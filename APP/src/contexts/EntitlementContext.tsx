@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { setAppReadOnlyMode } from '../db/database';
+import { validateLoginCredentials, normalizeEmail } from '../utils/inputValidation';
 
 type EntitlementStatus = 'active' | 'grace' | 'expired' | 'unknown';
 
@@ -225,7 +226,17 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       throw new Error('Supabase is not configured.');
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // Security: Validate input before sending to Supabase
+    const validation = validateLoginCredentials(email, password);
+    if (!validation.isValid) {
+      const errorMessage = validation.emailError || validation.passwordError || 'Invalid credentials';
+      throw new Error(errorMessage);
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ 
+      email: normalizeEmail(email), // Normalize email (trim + lowercase)
+      password 
+    });
     if (error) {
       throw error;
     }
@@ -251,11 +262,17 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       throw new Error('Supabase is not configured.');
     }
 
+    // Security: Validate email before sending reset request
+    const validation = validateLoginCredentials(email, 'dummy-password-for-email-only');
+    if (validation.emailError) {
+      throw new Error(validation.emailError);
+    }
+
     const basePath = window.location.pathname.endsWith('/')
       ? window.location.pathname
       : `${window.location.pathname}/`;
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
       redirectTo: `${window.location.origin}${basePath}`
     });
 
@@ -267,6 +284,12 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const updatePassword = useCallback(async (newPassword: string) => {
     if (!supabase) {
       throw new Error('Supabase is not configured.');
+    }
+
+    // Security: Validate password strength
+    const validation = validateLoginCredentials('dummy@email.com', newPassword);
+    if (validation.passwordError) {
+      throw new Error(validation.passwordError);
     }
 
     const { error } = await supabase.auth.updateUser({ password: newPassword });

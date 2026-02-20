@@ -1,0 +1,10 @@
+# Ignore all build artifacts
+*.apk
+*.msi
+*.exe
+*.dmg
+*.deb
+*.rpm
+
+# Keep README
+!README.md

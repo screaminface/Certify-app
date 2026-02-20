@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 
 interface FilterProps {
   searchText: string;
@@ -34,6 +34,28 @@ export const Filters: React.FC<FilterProps> = ({
   groups,
   onClearFilters
 }) => {
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const pollingIntervalRef = useRef<number | null>(null);
+  
+  // Poll input value continuously (fixes Android IME)
+  useEffect(() => {
+    // Check input value every 100ms to catch IME composition changes
+    pollingIntervalRef.current = window.setInterval(() => {
+      if (searchInputRef.current) {
+        const currentValue = searchInputRef.current.value;
+        if (currentValue !== searchText) {
+          onSearchTextChange(currentValue);
+        }
+      }
+    }, 100);
+    
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [searchText, onSearchTextChange]);
+  
   const hasActiveFilters = 
     searchText || 
     selectedGroup || 
@@ -98,7 +120,10 @@ export const Filters: React.FC<FilterProps> = ({
             Search (Company, Person, or Unique #)
           </label>
           <input
-            type="text"
+            ref={searchInputRef}
+            type="search"
+            inputMode="search"
+            autoComplete="off"
             value={searchText}
             onChange={(e) => onSearchTextChange(e.target.value)}
             placeholder="Search..."

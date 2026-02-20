@@ -62,6 +62,10 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     participant: undefined,
   });
 
+  // Marquee animation state (tap to scroll long names)
+  const [marqueeActive, setMarqueeActive] = useState<Set<string>>(new Set());
+  const marqueeTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
   const groups = useLiveQuery(() => db.groups.toArray(), []);
   const groupMap = useMemo(() => {
     if (!groups) return new Map();
@@ -153,9 +157,11 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
     const visible = hasActiveFilters ? sorted : sorted.slice(0, 2);
 
+    // Sort participants within each group by createdAt desc (newest first)
     return visible.map(([courseStartDate, data]) => ({
         courseStartDate,
         ...data,
+        participants: data.participants.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       }));
   }, [participantsByStatus.planned, groupMap, groups, hasActiveFilters]);
 
@@ -224,8 +230,13 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
        }
     });
     
-    // Sort by date
-    return Array.from(grouped.values()).sort((a,b) => a.group.courseStartDate.localeCompare(b.group.courseStartDate));
+    // Sort by date and sort participants within each group by uniqueNumber desc (newest first)
+    return Array.from(grouped.values())
+      .sort((a,b) => a.group.courseStartDate.localeCompare(b.group.courseStartDate))
+      .map(data => ({
+        ...data,
+        participants: data.participants.sort((a, b) => b.uniqueNumber.localeCompare(a.uniqueNumber))
+      }));
   }, [participantsByStatus.active, groups, groupMap]);
 
   // Get unique periods for each status
@@ -267,6 +278,80 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
       },
     };
   }, [participantsByStatus, groups, hasActiveFilters]);
+
+  // Cleanup marquee timers on unmount
+  useEffect(() => {
+    return () => {
+      marqueeTimers.current.forEach(timer => clearTimeout(timer));
+      marqueeTimers.current.clear();
+    };
+  }, []);
+
+  // Clear all marquee animations when entering bulk selection mode
+  useEffect(() => {
+    if (selectedIds.size > 0 && marqueeActive.size > 0) {
+      setMarqueeActive(new Set());
+      marqueeTimers.current.forEach(timer => clearTimeout(timer));
+      marqueeTimers.current.clear();
+    }
+  }, [selectedIds.size, marqueeActive.size]);
+
+  // Handle name tap to trigger marquee scroll
+  const handleNameTap = (participantId: string, event: React.MouseEvent<HTMLElement>) => {
+    // Don't trigger marquee if in bulk selection mode
+    if (selectedIds.size > 0) {
+      return;
+    }
+
+    const target = event.currentTarget;
+    
+    // Create temporary span to measure full text width
+    const tempSpan = document.createElement('span');
+    tempSpan.style.cssText = 'position: absolute; visibility: hidden; white-space: nowrap; display: inline-block;';
+    tempSpan.className = target.className.replace('marquee-active', '').replace('truncate', '');
+    tempSpan.textContent = target.textContent;
+    document.body.appendChild(tempSpan);
+    
+    const fullWidth = tempSpan.offsetWidth;
+    document.body.removeChild(tempSpan);
+    
+    // Check if text is truncated (overflow)
+    const containerWidth = target.offsetWidth;
+    const overflow = fullWidth - containerWidth;
+    
+    if (overflow <= 5) {
+      return; // Text fits (5px tolerance), no need for marquee
+    }
+
+    // Clear existing timer if any
+    const existingTimer = marqueeTimers.current.get(participantId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Activate marquee with calculated animation duration
+    setMarqueeActive(prev => new Set(prev).add(participantId));
+
+    // Set CSS custom property for animation distance
+    target.style.setProperty('--marquee-distance', `-${overflow}px`);
+    
+    // Calculate duration: ~40 pixels per second for readability
+    const duration = Math.max(2000, (overflow / 40) * 1000);
+    target.style.setProperty('--marquee-duration', `${duration}ms`);
+
+    // Auto-deactivate after: duration + 500ms pause at start + 500ms pause at end
+    const totalTime = duration + 1000;
+    const timer = setTimeout(() => {
+      setMarqueeActive(prev => {
+        const next = new Set(prev);
+        next.delete(participantId);
+        return next;
+      });
+      marqueeTimers.current.delete(participantId);
+    }, totalTime);
+
+    marqueeTimers.current.set(participantId, timer);
+  };
 
   // Auto-expand sections when search/filter results are present
   const prevParticipantsRef = useRef(participants);
@@ -464,7 +549,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
             <div className="mb-1">
               <CompanyBadge companyName={participant.companyName} />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
               {isSelected && (
                 <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center shrink-0">
                   <svg
@@ -482,7 +567,13 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                   </svg>
                 </div>
               )}
-              <h3 className="font-bold text-lg text-slate-900 leading-tight truncate">
+              <h3 
+                className={`font-bold text-lg text-slate-900 leading-tight cursor-pointer select-none ${
+                  marqueeActive.has(participant.id) ? 'marquee-active' : 'truncate'
+                }`}
+                onClick={(e) => handleNameTap(participant.id, e)}
+                title={marqueeActive.has(participant.id) ? undefined : participant.personName}
+              >
                 {participant.personName}
               </h3>
               {isLocked && (
@@ -637,11 +728,17 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         className="bg-white rounded-lg p-3 border border-slate-200"
       >
         <div className="flex justify-between items-start mb-2">
-          <div className="flex-1 min-w-0 pr-2">
+          <div className="flex-1 min-w-0 pr-2 overflow-hidden">
             <div className="mb-1">
               <CompanyBadge companyName={participant.companyName} />
             </div>
-            <h4 className="font-semibold text-slate-900 truncate">
+            <h4 
+              className={`font-semibold text-slate-900 cursor-pointer select-none ${
+                marqueeActive.has(participant.id) ? 'marquee-active' : 'truncate'
+              }`}
+              onClick={(e) => handleNameTap(participant.id, e)}
+              title={marqueeActive.has(participant.id) ? undefined : participant.personName}
+            >
               {participant.personName}
             </h4>
           </div>
@@ -735,6 +832,28 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
 
   return (
     <>
+      {/* Marquee animation styles */}
+      <style>
+        {`
+          @keyframes marquee-scroll {
+            0%, 10% {
+              transform: translateX(0);
+            }
+            90%, 100% {
+              transform: translateX(var(--marquee-distance, 0));
+            }
+          }
+
+          .marquee-active {
+            display: inline-block;
+            white-space: nowrap;
+            animation: marquee-scroll var(--marquee-duration, 3s) ease-in-out;
+            animation-iteration-count: 1;
+            animation-fill-mode: forwards;
+          }
+        `}
+      </style>
+
       <BulkActionBar
         selectedCount={selectedIds.size}
         selectedIds={Array.from(selectedIds)}

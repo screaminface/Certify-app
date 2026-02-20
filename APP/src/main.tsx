@@ -5,13 +5,37 @@ import './index.css';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+// Unregister old Service Workers to prevent cache issues
+async function unregisterServiceWorkers() {
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    for (const registration of registrations) {
+      await registration.unregister();
+      console.log('Unregistered old Service Worker');
+    }
+    // Clear all caches
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+      console.log('Cleared all caches');
+    }
+  }
+}
+
 // Clear localStorage on version change to prevent stale cache issues
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || '2.1.0';
 const VERSION_KEY = 'spi.app.version';
 
 const storedVersion = localStorage.getItem(VERSION_KEY);
 if (storedVersion !== APP_VERSION) {
-  console.log(`Version changed from '${storedVersion}' to '${APP_VERSION}', clearing localStorage`);
+  console.log(`Version changed from '${storedVersion}' to '${APP_VERSION}', clearing caches`);
+  
+  // Unregister Service Workers and clear caches
+  unregisterServiceWorkers().then(() => {
+    console.log('Service Workers unregistered and caches cleared');
+    // Force reload to get fresh content
+    window.location.reload();
+  });
   
   // Clear all cached data except critical settings
   const keysToPreserve = ['spi.db.initialized', 'spi.language'];

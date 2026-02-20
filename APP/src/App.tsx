@@ -1,4 +1,4 @@
-import { FormEvent, Suspense, lazy, useState, useMemo, useEffect } from 'react';
+import { FormEvent, useState, useMemo, useEffect } from 'react';
 import { useParticipants } from './hooks/useParticipants';
 import { useGroups } from './hooks/useGroups';
 import { useGroupSections } from './hooks/useGroupSections';
@@ -17,10 +17,9 @@ import { useLanguage } from './contexts/LanguageContext';
 import { ensureSingleActiveGroup, syncGroups } from './utils/groupUtils';
 import { AppLockGate } from './components/security/AppLockGate';
 import { EntitlementProvider, useEntitlement } from './contexts/EntitlementContext';
+import { ToolsPage } from './components/ToolsPage';
 
 type Translator = (key: string, params?: Record<string, string>) => string;
-
-const ToolsPage = lazy(() => import('./components/ToolsPage').then(module => ({ default: module.ToolsPage })));
 
 function localizeAuthError(message: string, t: Translator): string {
   const normalized = message.toLowerCase();
@@ -164,7 +163,7 @@ function AppContent() {
     if (!participants) return [];
     const currentYear = new Date().getFullYear();
 
-    return participants.filter(p => {
+    const result = participants.filter(p => {
       // Find group for this participant
       const groupInfo = groupsByCourseStartDate.get(p.courseStartDate);
       
@@ -180,11 +179,15 @@ function AppContent() {
 
       // Search text filter
       if (searchText) {
-        const search = searchText.toLowerCase();
+        // Normalize Unicode for Cyrillic + collapse multiple spaces
+        const search = searchText.trim().replace(/\s+/g, ' ').toLowerCase().normalize('NFC');
+        const normalizeName = (name: string) => 
+          name.replace(/\s+/g, ' ').toLowerCase().normalize('NFC');
+        
         const matchesSearch = 
-          p.companyName.toLowerCase().includes(search) ||
-          p.personName.toLowerCase().includes(search) ||
-          p.uniqueNumber.toLowerCase().includes(search);
+          p.companyName.toLowerCase().normalize('NFC').includes(search) ||
+          normalizeName(p.personName).includes(search) ||
+          p.uniqueNumber.toLowerCase().normalize('NFC').includes(search);
         if (!matchesSearch) return false;
       }
 
@@ -219,6 +222,8 @@ function AppContent() {
 
       return true;
     });
+
+    return result;
   }, [participants, groupsByCourseStartDate, searchText, selectedGroup, statusFilters, dateRange]);
 
   // Compute counters
@@ -751,14 +756,12 @@ function AppContent() {
         </main>
       ) : (
         <main className="container mx-auto px-4 py-6">
-          <Suspense fallback={<div className="text-sm text-slate-500">{t('common.loading')}</div>}>
-            <ToolsPage 
-              filteredParticipants={filteredParticipants} 
-              entitlement={entitlement}
-              entitlementLoading={entitlementLoading}
-              onSignOut={handleSignOut}
-            />
-          </Suspense>
+          <ToolsPage 
+            filteredParticipants={filteredParticipants} 
+            entitlement={entitlement}
+            entitlementLoading={entitlementLoading}
+            onSignOut={handleSignOut}
+          />
         </main>
       )}
 

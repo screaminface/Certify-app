@@ -43,8 +43,6 @@ export interface BackupV2 {
 
 // Union type of all possible backup shapes
 
-
-
 // -- Migration Functions --
 
 /**

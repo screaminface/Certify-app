@@ -275,4 +275,4 @@ select app.refresh_entitlement_for_tenant('ea4d8b1d-ab2e-461f-b3ed-61b930d42906'
 - **Group lifecycle broken:** Verify only one active group exists, check for planned groups with `groupNumber` assigned (should be null)
 
 ---
-See [README.md](../../README.md), [PROJECT_COMPLETE.md](../../PROJECT_COMPLETE.md), [QUICKSTART.md](../../QUICKSTART.md) for user-facing documentation.
+See [README.md](../README.md), [PROJECT_COMPLETE.md](../PROJECT_COMPLETE.md), [QUICKSTART.md](../QUICKSTART.md) for user-facing documentation.

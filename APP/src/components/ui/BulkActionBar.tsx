@@ -17,7 +17,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   onActionComplete
 }) => {
   const { t } = useLanguage();
-  const { bulkSetFlag, bulkSetCompleted } = useBulkActions();
+  const { bulkSetFlag } = useBulkActions();
   const [isProcessing, setIsProcessing] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -60,33 +60,6 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
       onConfirm: async () => {
         setConfirmModal({ ...confirmModal, isOpen: false });
         await handleBulkAction('paid', true);
-      }
-    });
-  };
-
-  // Future: bulk completed toggle - prepared but not yet used in UI
-  // @ts-ignore - Function prepared for future use
-  const handleBulkCompleted = () => {
-    setConfirmModal({
-      isOpen: true,
-      title: t('bulk.confirmCompletedTitle'),
-      message: t('bulk.confirmCompletedMessage'),
-      onConfirm: async () => {
-        setConfirmModal({ ...confirmModal, isOpen: false });
-        setIsProcessing(true);
-        try {
-          const result = await bulkSetCompleted(selectedIds);
-          if (result.failed > 0) {
-            alert(`${t('bulk.completed')}: ${result.success}\n${t('bulk.failed')}: ${result.failed}\n${result.errors.join('\n')}`);
-          } else {
-            alert(`${t('bulk.success')}: ${result.success} ${t('bulk.updated')}`);
-          }
-          onActionComplete();
-        } catch (error) {
-          alert(`${t('bulk.error')}: ${(error as Error).message}`);
-        } finally {
-          setIsProcessing(false);
-        }
       }
     });
   };

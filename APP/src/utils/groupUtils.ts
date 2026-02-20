@@ -327,8 +327,6 @@ export async function deleteGroupIfEmpty(groupId: string): Promise<boolean> {
   return false;
 }
 
-
-
 /**
  * Sync groups table with current participants and maintain workflow states
  */
@@ -371,9 +369,7 @@ export async function syncGroups(): Promise<void> {
   for (const g of activeGroupsAll) {
       await generateUniqueNumbersForGroup(g.courseStartDate);
   }
-  
 
-  
   // 1.2 Sanitize Group Dates (Fix local timezone bugs resulting in Sunday dates)
   // If any group starts on a non-Monday, shift it to Monday
   for (const g of allGroups) {
@@ -648,8 +644,6 @@ export async function getCompletedGroups(): Promise<Group[]> {
     .reverse()
     .sortBy('groupNumber');
 }
-
-
 
 /**
  * Fix group dates based on participants' medical dates

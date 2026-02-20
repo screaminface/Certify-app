@@ -3,7 +3,7 @@ import { Participant, db } from '../db/database';
 import { useParticipants } from '../hooks/useParticipants';
 import { computeCourseDates } from '../utils/dateUtils';
 import { isValidUniqueNumberFormat, isUniqueNumberAvailable, generateNextUniqueNumber, checkForGaps, parseUniqueNumber } from '../utils/uniqueNumberUtils';
-import { isMedicalDateValid, isMedicalValidForCourse, formatDateBG, MEDICAL_EXPIRED_MESSAGE } from '../utils/medicalValidation';
+import { isMedicalValidForCourse, formatDateBG } from '../utils/medicalValidation';
 import { getActiveGroup, getSuggestedGroup } from '../utils/groupUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ConfirmModal } from './ui/ConfirmModal';
@@ -207,12 +207,9 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
 
     if (!formData.medicalDate) {
       newErrors.medicalDate = t('modal.medicalDateRequired');
-    } else {
-      // Check medical date validity (6-month expiry)
-      if (!isMedicalDateValid(formData.medicalDate)) {
-        newErrors.medicalDate = MEDICAL_EXPIRED_MESSAGE;
-      }
     }
+    // Note: Medical validity is checked later against specific courseStartDate
+    // using isMedicalValidForCourse() at lines 268/277
 
     // Validate unique number if manually entered
     if (formData.uniqueNumber) {
@@ -314,9 +311,13 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
   const performSave = async () => {
     setIsSubmitting(true);
     try {
+      // Normalize whitespace: replace multiple spaces with single space, trim
+      const normalizeName = (name: string) => 
+        name.trim().replace(/\s+/g, ' ').normalize('NFC');
+      
       const data = {
         companyName: formData.companyName.trim(),
-        personName: formData.personName.trim(),
+        personName: normalizeName(formData.personName),
         egn: formData.egn.trim(),
         birthPlace: formData.birthPlace.trim(),
         citizenship: formData.citizenship.trim() || 'българско',
