@@ -14,8 +14,8 @@
     "tauri:build": "tauri build",
     "android:sync": "npm run build:android && npx cap sync android",
     "android:open": "npx cap open android",
-    "android:build:release": "npm run android:sync && cd android && gradlew assembleRelease && cd .. && powershell -Command \"$timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'; Copy-Item android/app/build/outputs/apk/release/app-release-unsigned.apk -Destination releases/CERTIFY-2.2.0-android-release-$timestamp.apk\"",
-    "android:build:debug": "npm run android:sync && cd android && gradlew assembleDebug && cd .. && powershell -Command \"$timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'; Copy-Item android/app/build/outputs/apk/debug/app-debug.apk -Destination releases/CERTIFY-2.2.0-android-debug-$timestamp.apk\"",
+    "android:build:release": "npm run android:sync && cd android && gradlew assembleRelease && cd .. && powershell -Command \"$version = (Get-Content package.json | ConvertFrom-Json).version; Copy-Item android/app/build/outputs/apk/release/app-release-unsigned.apk -Destination releases/CERTIFY-v$version-android-release.apk\"",
+    "android:build:debug": "npm run android:sync && cd android && gradlew assembleDebug && cd .. && powershell -Command \"$version = (Get-Content package.json | ConvertFrom-Json).version; Copy-Item android/app/build/outputs/apk/debug/app-debug.apk -Destination releases/CERTIFY-v$version-android-debug.apk\"",
     "android:build": "npm run android:build:debug"
   },
   "dependencies": {
