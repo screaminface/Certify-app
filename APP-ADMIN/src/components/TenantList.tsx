@@ -4,6 +4,7 @@ interface Tenant {
   id: string
   code: string
   name: string
+  owner_email: string | null
   plan_code: string
   subscription_status: string
   current_period_end: string | null
@@ -20,14 +21,16 @@ interface TenantListProps {
 export default function TenantList({ tenants, onRefresh }: TenantListProps) {
   if (tenants.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow p-8 text-center">
-        <p className="text-gray-500">No tenants found</p>
+      <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg p-12 text-center border border-gray-100">
+        <div className="text-6xl mb-4">📭</div>
+        <p className="text-gray-500 font-medium">No tenants found</p>
+        <p className="text-gray-400 text-sm mt-2">Add your first tenant to get started</p>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 sm:space-y-5">
       {tenants.map((tenant) => (
         <TenantCard key={tenant.id} tenant={tenant} onRefresh={onRefresh} />
       ))}
