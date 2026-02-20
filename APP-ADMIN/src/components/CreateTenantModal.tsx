@@ -1,18 +1,6 @@
 import { useState } from 'react'
 import { X, Plus, Building2, Mail, Lock, Code, Calendar } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { createClient } from '@supabase/supabase-js'
-
-// Admin client with service role for user creation
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY
-
-const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
 
 interface CreateTenantModalProps {
   onClose: () => void
@@ -44,14 +32,15 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
 
       console.log('🔵 Step 1: Creating owner user...')
       
-      // Step 1: Create auth user (admin API - no email confirmation needed)
-      const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
+      // Step 1: Create auth user with signUp
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        email_confirm: true, // Auto-confirm email
-        user_metadata: {
-          tenant_code: formData.code,
-          tenant_name: formData.name
+        options: {
+          data: {
+            tenant_code: formData.code,
+            tenant_name: formData.name
+          }
         }
       })
 
@@ -88,7 +77,7 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
       }
 
       console.log('🟢 Tenant created successfully!')
-      alert(`✅ Фирма създадена успешно!\n\n🏢 Име: ${formData.name}\n🔑 Код: ${formData.code}\n\n📧 Login Email: ${formData.email}\n🔐 Парола: ${formData.password}\n\n📅 План: ${result.plan} (${result.days} дни)\n\n✨ Собственикът може да влезе в CERTIFY апп!`)
+      alert(`✅ Фирма създадена успешно!\n\n🏢 Име: ${formData.name}\n🔑 Код: ${formData.code}\n\n📧 Login Email: ${formData.email}\n🔐 Парола: ${formData.password}\n\n📅 План: ${result.plan} (${result.days} дни)\n\n⚠️ Owner трябва да потвърди email-а си (провери inbox).`)
       onSuccess()
       onClose()
     } catch (err: any) {
