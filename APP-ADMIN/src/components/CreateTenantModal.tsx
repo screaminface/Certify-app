@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Plus, Building2, Mail, Lock, Code, Calendar } from 'lucide-react'
+import { X, Plus, Building2, Mail, Code, Calendar } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 interface CreateTenantModalProps {
@@ -12,7 +12,6 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
     name: '',
     code: '',
     email: '',
-    password: '',
     plan: 'monthly' as 'monthly' | 'yearly',
     days: 30
   })
@@ -25,39 +24,9 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
     setError('')
 
     try {
-      // Validation
-      if (formData.password.length < 8) {
-        throw new Error('Паролата трябва да е поне 8 символа')
-      }
+      console.log('🔵 Creating tenant company...')
 
-      console.log('🔵 Step 1: Creating auth user...')
-      
-      // Step 1: Create auth user with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          emailRedirectTo: 'http://localhost:5173'
-        }
-      })
-
-      if (authError) {
-        if (authError.message.includes('already registered')) {
-          throw new Error(`Email ${formData.email} вече е регистриран`)
-        }
-        throw authError
-      }
-
-      if (!authData.user) {
-        throw new Error('Failed to create user')
-      }
-
-      console.log('🟢 User created:', authData.user.id)
-      console.log('🔵 Step 2: Creating tenant structure...')
-
-      // Step 2: Create tenant structure
       const { data, error: rpcError } = await supabase.rpc('admin_create_tenant', {
-        p_user_id: authData.user.id,
         p_tenant_name: formData.name,
         p_tenant_code: formData.code,
         p_owner_email: formData.email,
@@ -67,14 +36,14 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
 
       if (rpcError) throw rpcError
       
-      const result = data as { success: boolean; error?: string }
+      const result = data as { success: boolean; error?: string; tenant_code?: string; plan?: string; days?: number }
       
       if (!result.success) {
         throw new Error(result.error || 'Failed to create tenant')
       }
 
-      console.log('🟢 Tenant created successfully!')
-      alert(`✅ Tenant създаден успешно!\n\n📧 Email: ${formData.email}\n🔑 Парола: ${formData.password}\n\n⚠️ Потребителят трябва да потвърди email-а си.`)
+      console.log('🟢 Tenant company created successfully!')
+      alert(`✅ Компания създадена успешно!\n\n🏢 Код: ${result.tenant_code}\n📧 Контакт: ${formData.email}\n📅 План: ${result.plan} (${result.days} дни)\n\n✨ Тенантът вече може да ползва вашия апп!`)
       onSuccess()
       onClose()
     } catch (err: any) {
@@ -84,10 +53,6 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
       // Friendly error messages
       if (errorMsg.includes('already exists')) {
         errorMsg = `Tenant код "${formData.code}" вече съществува`
-      } else if (errorMsg.includes('User not found')) {
-        errorMsg = 'Грешка при създаване на потребител'
-      } else if (errorMsg.includes('Password')) {
-        errorMsg = 'Паролата е твърде слаба. Минимум 8 символа.'
       }
       
       setError(errorMsg)
@@ -157,7 +122,7 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
           <div>
             <label className="flex items-center space-x-2 text-sm font-bold text-gray-700 mb-2">
               <Mail className="w-4 h-4" />
-              <span>Owner Email</span>
+              <span>Контактен Email</span>
             </label>
             <input
               type="email"
@@ -167,24 +132,7 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
               placeholder="owner@company.com"
               required
             />
-          </div>
-
-          {/* Password */}
-          <div>
-            <label className="flex items-center space-x-2 text-sm font-bold text-gray-700 mb-2">
-              <Lock className="w-4 h-4" />
-              <span>Owner Password</span>
-            </label>
-            <input
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-              placeholder="••••••••"
-              minLength={8}
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">Минимум 8 символа</p>
+            <p className="text-xs text-gray-500 mt-1">За връзка с клиента (не се използва за login)</p>
           </div>
 
           {/* Plan */}
