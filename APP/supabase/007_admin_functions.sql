@@ -5,8 +5,8 @@
 create schema if not exists app;
 
 -- Admin function: get all tenants with subscriptions and entitlements
--- SECURITY: Only restrict access via client-side email check
--- For production: add proper RLS or require specific admin role
+-- SECURITY DEFINER bypasses RLS policies
+-- IMPORTANT: This function has FULL database access, admin check is in client
 create or replace function app.admin_get_all_tenants()
 returns table (
   id uuid,
@@ -20,12 +20,11 @@ returns table (
   read_only boolean,
   last_synced_at timestamptz
 )
-language plpgsql
+language sql
 security definer
-set search_path = app, public
+set search_path = app, pg_catalog
+stable
 as $$
-begin
-  return query
   select
     t.id,
     t.code,
@@ -41,9 +40,8 @@ begin
   left join app.subscriptions s on s.tenant_id = t.id and s.provider = 'manual'
   left join app.entitlements e on e.tenant_id = t.id
   order by t.name asc;
-end;
 $$;
 
--- Grant execute to authenticated users (admin check is in client code)
--- For production: create admin role and grant only to that
+-- Grant execute to authenticated users (admin check happens in APP-ADMIN login)
+-- For production: add proper admin role table
 grant execute on function app.admin_get_all_tenants() to authenticated, anon;
