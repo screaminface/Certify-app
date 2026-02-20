@@ -29,10 +29,16 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   const loadTenants = async () => {
     setRefreshing(true)
     try {
+      console.log('🔍 Calling admin_get_all_tenants...')
       const { data, error } = await supabase
         .rpc('admin_get_all_tenants')
 
-      if (error) throw error
+      console.log('📦 RPC Response:', { data, error })
+
+      if (error) {
+        console.error('❌ RPC Error:', error)
+        throw error
+      }
 
       const formatted = (data || []).map((t: any) => ({
         id: t.id,
@@ -46,9 +52,11 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         read_only: t.read_only ?? true,
       }))
 
+      console.log('✅ Formatted tenants:', formatted)
       setTenants(formatted)
     } catch (error) {
-      console.error('Error loading tenants:', error)
+      console.error('💥 Error loading tenants:', error)
+      alert('Failed to load tenants. Check console for details.')
     } finally {
       setLoading(false)
       setRefreshing(false)
