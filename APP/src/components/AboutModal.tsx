@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Info, Calendar, Package, Users, Activity, CheckCircle2, AlertTriangle, XCircle, HelpCircle, CalendarClock, BadgeCheck } from 'lucide-react';
+import { X, Info, Calendar, Package, Users, Activity, CheckCircle2, AlertTriangle, XCircle, HelpCircle, CalendarClock, BadgeCheck, Mail } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { formatDisplayDate, toISODate } from '../utils/dateUtils';
 
@@ -13,6 +13,7 @@ interface AboutModalProps {
     planCode: string | null;
     currentPeriodEnd: string | null;
     graceUntil: string | null;
+    userEmail?: string | null;
   };
   entitlementLoading?: boolean;
   onSignOut?: () => Promise<void>;
@@ -127,6 +128,12 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, entitle
                 <div className="border-t border-slate-200 pt-3">
                   <div className="text-sm font-semibold text-slate-700 mb-2">{t('tools.subscriptionAccount')}</div>
                   <div className="space-y-1.5 text-sm text-slate-700">
+                    {entitlement?.userEmail && (
+                      <p className="flex items-center gap-1.5">
+                        <Mail className="w-4 h-4 text-slate-500" strokeWidth={2} />
+                        <span className="truncate">{entitlement.userEmail}</span>
+                      </p>
+                    )}
                     <p className="flex items-center gap-1.5">
                       <strong>{t('tools.subscriptionStatus')}:</strong>{' '}
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-semibold ${entitlementStatusClass}`}>

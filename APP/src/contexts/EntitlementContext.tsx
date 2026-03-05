@@ -14,6 +14,7 @@ interface EntitlementState {
   daysUntilReadOnly: number | null;
   currentPeriodEnd: string | null;
   graceUntil: string | null;
+  userEmail: string | null;
   error: string | null;
   lastCheckedAt: string | null;
 }
@@ -42,6 +43,7 @@ const defaultState: EntitlementState = {
   daysUntilReadOnly: null,
   currentPeriodEnd: null,
   graceUntil: null,
+  userEmail: null,
   error: null,
   lastCheckedAt: null
 };
@@ -135,11 +137,8 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
     
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        throw sessionError;
-      }
-
+      // First check local session (no network) — if no session, show login immediately
+      const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) {
         const nextState: EntitlementState = {
           ...defaultState,
@@ -154,14 +153,69 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return;
       }
 
+      // Session exists locally — validate with server (detects deleted users)
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) {
+        // User was deleted from auth.users — force local sign out
+        await supabase.auth.signOut();
+        const nextState: EntitlementState = {
+          ...defaultState,
+          configured: true,
+          authenticated: false,
+          readOnly: false,
+          error: null,
+          lastCheckedAt: new Date().toISOString()
+        };
+        setEntitlement(nextState);
+        persistEntitlement(nextState);
+        setAppReadOnlyMode(false);
+        return;
+      }
+
       const { data, error } = await supabase.rpc('entitlement_me', { p_tenant_id: null });
       if (error) {
+        // If entitlement check fails for an authenticated user, it means their
+        // account/tenant/membership was deleted — force sign out immediately.
+        // Only skip sign-out for clear network/connectivity errors.
+        const msg = (error.message || '').toLowerCase();
+        const isNetworkError = msg.includes('fetch') || msg.includes('networkerror') ||
+          msg.includes('failed to fetch') || msg.includes('load failed') ||
+          msg.includes('network request') || msg.includes('timeout') ||
+          msg.includes('econnrefused');
+        if (!isNetworkError) {
+          await supabase.auth.signOut();
+          const nextState: EntitlementState = {
+            ...defaultState,
+            configured: true,
+            authenticated: false,
+            readOnly: false,
+            error: null,
+            lastCheckedAt: new Date().toISOString()
+          };
+          setEntitlement(nextState);
+          persistEntitlement(nextState);
+          setAppReadOnlyMode(false);
+          return;
+        }
         throw error;
       }
 
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) {
-        throw new Error('Entitlement data is missing.');
+        // Tenant/membership was deleted — force sign out
+        await supabase.auth.signOut();
+        const nextState: EntitlementState = {
+          ...defaultState,
+          configured: true,
+          authenticated: false,
+          readOnly: false,
+          error: null,
+          lastCheckedAt: new Date().toISOString()
+        };
+        setEntitlement(nextState);
+        persistEntitlement(nextState);
+        setAppReadOnlyMode(false);
+        return;
       }
 
       const nextState: EntitlementState = {
@@ -173,6 +227,7 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         daysUntilReadOnly: typeof row.days_until_read_only === 'number' ? row.days_until_read_only : null,
         currentPeriodEnd: row.current_period_end || null,
         graceUntil: row.grace_until || null,
+        userEmail: userData.user.email ?? null,
         error: null,
         lastCheckedAt: new Date().toISOString()
       };
@@ -188,7 +243,12 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         lower.includes('jwt') ||
         lower.includes('refresh token') ||
         lower.includes('session') ||
-        lower.includes('invalid token')
+        lower.includes('invalid token') ||
+        lower.includes('no active tenant membership') ||
+        lower.includes('not a member of this tenant') ||
+        lower.includes('entitlement data is missing') ||
+        lower.includes('user not found') ||
+        lower.includes('not authenticated')
       ) {
         await supabase.auth.signOut();
         const nextState: EntitlementState = {

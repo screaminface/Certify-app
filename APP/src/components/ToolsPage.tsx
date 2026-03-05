@@ -38,6 +38,7 @@ interface ToolsPageProps {
     planCode: string | null;
     currentPeriodEnd: string | null;
     graceUntil: string | null;
+    userEmail: string | null;
   };
   entitlementLoading?: boolean;
   onSignOut?: () => Promise<void>;

@@ -1,30 +1,29 @@
 import TenantCard from './TenantCard'
-
-interface Tenant {
-  id: string
-  code: string
-  name: string
-  owner_email: string | null
-  plan_code: string
-  subscription_status: string
-  current_period_end: string | null
-  entitlement_status: string
-  grace_until: string | null
-  read_only: boolean
-}
+import { type TenantData } from '../lib/subscriptionUi'
+import { Inbox } from 'lucide-react'
 
 interface TenantListProps {
-  tenants: Tenant[]
+  tenants: TenantData[]
+  loading: boolean
   onRefresh: () => void
 }
 
-export default function TenantList({ tenants, onRefresh }: TenantListProps) {
+export default function TenantList({ tenants, loading, onRefresh }: TenantListProps) {
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+        <p className="text-gray-500 mt-4">Зарежда компании...</p>
+      </div>
+    )
+  }
+
   if (tenants.length === 0) {
     return (
       <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg p-12 text-center border border-gray-100">
-        <div className="text-6xl mb-4">📭</div>
-        <p className="text-gray-500 font-medium">No tenants found</p>
-        <p className="text-gray-400 text-sm mt-2">Add your first tenant to get started</p>
+        <Inbox className="w-20 h-20 mx-auto mb-4 text-slate-300" />
+        <p className="text-gray-500 font-medium">Няма намерени компании</p>
+        <p className="text-gray-400 text-sm mt-2">Опитайте с различно търсене или филтър</p>
       </div>
     )
   }

@@ -1,224 +1,356 @@
 import { useState } from 'react'
-import { format, formatDistanceToNow } from 'date-fns'
-import { 
-  Calendar, 
-  Lock, 
-  Unlock, 
-  Mail, 
+import { format } from 'date-fns'
+import {
+  Calendar,
+  CalendarCheck,
+  Lock,
+  Unlock,
+  Mail,
   ArrowLeftRight,
   Clock,
   CheckCircle,
+  AlertTriangle,
   XCircle,
-  AlertCircle
+  MoreVertical,
+  Users,
+  CalendarDays,
+  Plus,
+  Zap,
+  Trash2,
+  Hourglass,
 } from 'lucide-react'
 import { useAdminActions } from '../hooks/useAdminActions'
 import { supabase } from '../lib/supabase'
-
-interface Tenant {
-  id: string
-  code: string
-  name: string
-  owner_email: string | null
-  plan_code: string
-  subscription_status: string
-  current_period_end: string | null
-  entitlement_status: string
-  grace_until: string | null
-  read_only: boolean
-}
+import { computeStatus, formatPlan, type TenantData } from '../lib/subscriptionUi'
 
 interface TenantCardProps {
-  tenant: Tenant
+  tenant: TenantData
   onRefresh: () => void
 }
 
 export default function TenantCard({ tenant, onRefresh }: TenantCardProps) {
   const [loading, setLoading] = useState(false)
-  const { extendSubscription, lockTenant, unlockTenant, switchPlan } = useAdminActions()
+  const [showMore, setShowMore] = useState(false)
+  const [showLinkForm, setShowLinkForm] = useState(false)
+  const [linkEmail, setLinkEmail] = useState('')
+  const [linkPassword, setLinkPassword] = useState('')
+  const { extendSubscription, lockTenant, unlockTenant, setGrace, switchPlan, deleteTenant, createAndLinkUser } = useAdminActions()
 
-  const handleExtend = async (days: number, plan: 'monthly' | 'yearly') => {
+  const computed = computeStatus(tenant)
+
+  const StatusIcon =
+    computed.isActive   ? CheckCircle :
+    computed.isExpiring ? Clock :
+    computed.isGrace    ? AlertTriangle :
+    computed.isLocked   ? Lock :
+    XCircle
+
+  const PlanIcon = tenant.plan_code === 'yearly' ? CalendarCheck : Calendar
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+  const withLoading = async (fn: () => Promise<void>) => {
     setLoading(true)
+    setShowMore(false)
     try {
-      await extendSubscription(tenant.id, plan, days)
+      await fn()
       await onRefresh()
-    } catch (error) {
-      console.error('Failed to extend:', error)
+    } catch (err: any) {
+      alert(err?.message || 'Грешка — виж конзолата')
+      console.error(err)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleLock = async () => {
-    setLoading(true)
-    try {
+  const handleExtend = (days: number) =>
+    withLoading(() => extendSubscription(tenant.id, tenant.plan_code as 'monthly' | 'yearly', days))
+
+  const handleLock = () =>
+    withLoading(async () => {
+      if (!confirm(`Заключи "${tenant.name}" ВЕДНАГА?\n\nДостъпът се блокира моментално — без гратисен период.`)) return
       await lockTenant(tenant.id)
-      await onRefresh()
-    } catch (error) {
-      console.error('Failed to lock:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+    })
 
-  const handleUnlock = async () => {
-    setLoading(true)
-    try {
-      await unlockTenant(tenant.id, tenant.plan_code as 'monthly' | 'yearly')
-      await onRefresh()
-    } catch (error) {
-      console.error('Failed to unlock:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const handleUnlock = () =>
+    withLoading(() => unlockTenant(tenant.id, tenant.plan_code as 'monthly' | 'yearly'))
 
-  const handleSwitchPlan = async () => {
-    setLoading(true)
-    try {
+  const handleGrace = () =>
+    withLoading(async () => {
+      if (!confirm(`Пусни гратисен период за "${tenant.name}"?\n\n10 дни четене без плащане.`)) return
+      await setGrace(tenant.id, 10)
+    })
+
+  const handleSwitchPlan = () =>
+    withLoading(async () => {
       const newPlan = tenant.plan_code === 'monthly' ? 'yearly' : 'monthly'
+      if (!confirm(`Смени план на "${tenant.name}" → ${newPlan === 'yearly' ? 'Годишен' : 'Месечен'}?`)) return
       await switchPlan(tenant.id, newPlan)
-      await onRefresh()
-    } catch (error) {
-      console.error('Failed to switch plan:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+    })
 
-  const handleResetPassword = async () => {
-    if (!tenant.owner_email) {
-      alert('No owner email found for this tenant')
-      return
-    }
-    
-    setLoading(true)
-    try {
-      // Send reset link to main CERTIFY app
+  const handleDelete = () =>
+    withLoading(async () => {
+      const confirmed = prompt(`Изтрий "${tenant.name}" ЗАВИНАГИ?\n\nВъведи кода на компанията:`)
+      if (confirmed !== tenant.code) { alert('Кодът не съвпада — отменено.'); return }
+      await deleteTenant(tenant.id)
+    })
+
+  const handleResetPassword = () =>
+    withLoading(async () => {
+      if (!tenant.owner_email) { alert('Няма имейл на собственика'); return }
       const { error } = await supabase.auth.resetPasswordForEmail(tenant.owner_email, {
-        redirectTo: 'http://localhost:5173'
+        redirectTo: window.location.origin,
       })
-      
       if (error) throw error
-      
-      alert(`✅ Password reset email sent to ${tenant.owner_email}\n\nThey will reset password in the main CERTIFY app.`)
-    } catch (error) {
-      console.error('Failed to send reset email:', error)
-      alert('❌ Failed to send password reset email')
-    } finally {
-      setLoading(false)
+      alert(`Линкът е изпратен на ${tenant.owner_email}`)
+    })
+
+  const handleLinkUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!linkEmail.trim() || !linkPassword.trim()) return
+    await withLoading(async () => {
+      const result = await createAndLinkUser(tenant.id, linkEmail.trim(), linkPassword.trim())
+      alert(result.message || `Потребителят е създаден и свързан!\n\nИмейл: ${linkEmail.trim()}`)
+      setShowLinkForm(false)
+      setLinkEmail('')
+      setLinkPassword('')
+    })
+  }
+
+  // ── Days remaining chip ───────────────────────────────────────────────
+  const DaysChip = () => {
+    const d = tenant.days_remaining
+    if (computed.isLocked)
+      return <span className="text-xs font-semibold text-slate-500 flex items-center gap-1"><Lock className="w-3 h-3" />Заключен</span>
+    if (d === -999 || d == null)
+      return <span className="text-xs font-bold text-red-500">Без абонамент</span>
+    if (d <= 0 && computed.isGrace) {
+      const gl = tenant.grace_until ? Math.ceil((new Date(tenant.grace_until).getTime() - Date.now()) / 86400000) : 0
+      return <span className="text-xs font-bold text-orange-600">Grace: {gl > 0 ? `${gl} дни` : 'изтекъл'}</span>
     }
+    if (d <= 0) return <span className="text-xs font-bold text-red-600">Изтекъл</span>
+    const cls = d <= 7 ? 'text-red-600' : d <= 14 ? 'text-orange-600' : d <= 30 ? 'text-amber-600' : 'text-emerald-600'
+    return <span className={`text-xs font-bold tabular-nums ${cls}`}>{d} {d === 1 ? 'ден' : 'дни'}</span>
   }
 
-  const statusConfig = {
-    active: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', label: 'Active' },
-    grace: { icon: AlertCircle, color: 'text-yellow-600', bg: 'bg-yellow-50', label: 'Grace' },
-    expired: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50', label: 'Expired' },
-  }
-
-  const status = statusConfig[tenant.entitlement_status as keyof typeof statusConfig] || statusConfig.expired
-  const StatusIcon = status.icon
+  const ringClass =
+    computed.urgencyLevel === 'critical' ? 'ring-1 ring-red-200' :
+    computed.urgencyLevel === 'danger'   ? 'ring-1 ring-orange-200' :
+    computed.urgencyLevel === 'warning'  ? 'ring-1 ring-amber-200' : ''
 
   return (
-    <div className="bg-gradient-to-br from-white to-gray-50/50 rounded-2xl shadow-lg hover:shadow-2xl transition-all p-5 sm:p-6 border border-gray-100 hover:scale-[1.02]">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-        <div className="flex-1">
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <h3 className="text-lg sm:text-xl font-black text-gray-900">{tenant.name}</h3>
-            <span className={`inline-flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-bold ${status.bg} ${status.color} shadow-sm`}>
-              <StatusIcon className="w-3.5 h-3.5" />
-              <span>{status.label}</span>
-            </span>
-            <span className="inline-flex items-center px-2.5 py-1 bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-xs font-bold rounded-lg shadow-sm">
-              {tenant.plan_code === 'yearly' ? '📅 Yearly' : '📆 Monthly'}
-            </span>
-          </div>
-          <p className="text-xs text-gray-400 font-mono mb-2">{tenant.code}</p>
-          {tenant.current_period_end && (
-            <div className="flex items-center space-x-2 text-sm">
-              <span className="font-bold text-gray-700">💳 Paid until:</span>
-              <span className="text-gray-900 font-semibold">
-                {new Date(tenant.current_period_end).toLocaleDateString('bg-BG', { 
-                  year: 'numeric', 
-                  month: 'short', 
-                  day: 'numeric' 
-                })}
-              </span>
-              <span className="text-xs text-gray-400">({formatDistanceToNow(new Date(tenant.current_period_end), { addSuffix: true })})</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {tenant.entitlement_status === 'grace' && tenant.grace_until && (
-        <div className="mb-4 p-4 bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300 rounded-xl flex items-start space-x-3 shadow-sm">
-          <Clock className="w-5 h-5 text-yellow-600 mt-0.5 animate-pulse" />
-          <div className="text-sm text-yellow-800">
-            <span className="font-bold">⚠️ Grace period:</span> {formatDistanceToNow(new Date(tenant.grace_until), { addSuffix: true })}
-          </div>
+    <div className={`relative bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 border-l-4 ${computed.borderColor} ${ringClass}`}>
+      {/* Loading overlay */}
+      {loading && (
+        <div className="absolute inset-0 bg-white/70 rounded-2xl flex items-center justify-center z-10 backdrop-blur-sm">
+          <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
         </div>
       )}
 
-      {/* Quick Actions */}
-      <div className="flex flex-wrap gap-2 sm:gap-3">
-        {tenant.entitlement_status === 'active' ? (
+      <div className="p-5">
+        {/* ── Row 1: Header ──────────────────────────────────── */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <h3 className="text-base font-bold text-slate-900 leading-tight">{tenant.name}</h3>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${computed.badgeColor}`}>
+                <StatusIcon className="w-3 h-3" />
+                {computed.statusLabel}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold">
+                <PlanIcon className="w-3 h-3" />
+                {formatPlan(tenant.plan_code)}
+              </span>
+            </div>
+            <p className="text-xs font-mono text-slate-400">{tenant.code}</p>
+            {tenant.owner_email ? (
+              <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                <Mail className="w-3 h-3 shrink-0" />
+                <span className="truncate">{tenant.owner_email}</span>
+              </p>
+            ) : (
+              <div className="mt-0.5">
+                {!showLinkForm ? (
+                  <button
+                    onClick={() => setShowLinkForm(true)}
+                    className="flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-700 hover:underline"
+                  >
+                    <Mail className="w-3 h-3" />
+                    Няма потребител — свържи
+                  </button>
+                ) : (
+                  <form onSubmit={handleLinkUser} className="flex flex-col gap-1 mt-1">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="email"
+                        value={linkEmail}
+                        onChange={e => setLinkEmail(e.target.value)}
+                        placeholder="email@firma.com"
+                        required
+                        autoFocus
+                        className="flex-1 px-2 py-1 text-xs rounded-lg border border-indigo-300 focus:ring-1 focus:ring-indigo-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setShowLinkForm(false); setLinkEmail(''); setLinkPassword('') }}
+                        className="px-2 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
+                      >✕</button>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="password"
+                        value={linkPassword}
+                        onChange={e => setLinkPassword(e.target.value)}
+                        placeholder="парола (мин. 6 символа)"
+                        required
+                        minLength={6}
+                        className="flex-1 px-2 py-1 text-xs rounded-lg border border-indigo-300 focus:ring-1 focus:ring-indigo-500 outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={loading || !linkEmail || !linkPassword}
+                        className="px-3 py-1 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap"
+                      >Създай</button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ⋮ More menu */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowMore(!showMore)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+            {showMore && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowMore(false)} />
+                <div className="absolute right-0 top-8 z-20 bg-white rounded-xl shadow-lg border border-slate-200 py-1 min-w-[190px]">
+                  {tenant.owner_email && (
+                    <button
+                      onClick={handleResetPassword}
+                      disabled={loading}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <Mail className="w-4 h-4 text-indigo-500" />
+                      Изпрати нова парола
+                    </button>
+                  )}
+                  <div className="border-t border-slate-100 my-1" />
+                  <button
+                    onClick={handleDelete}
+                    disabled={loading}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Изтрий компанията
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── Row 2: Stats strip ─────────────────────────────── */}
+        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-100 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <DaysChip />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="text-xs text-slate-600">
+              {tenant.member_count ?? 0} {(tenant.member_count ?? 0) === 1 ? 'потребител' : 'потребители'}
+            </span>
+          </div>
+          {tenant.current_period_end && (
+            <div className="flex items-center gap-1.5">
+              <CalendarDays className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="text-xs text-slate-400">
+                {tenant.current_period_start
+                  ? `${format(new Date(tenant.current_period_start), 'dd.MM.yyyy')} \u2013 ${format(new Date(tenant.current_period_end), 'dd.MM.yyyy')}`
+                  : `до ${format(new Date(tenant.current_period_end), 'dd.MM.yyyy')}`
+                }
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* ── Row 3: Actions ─────────────────────────────────── */}
+        <div className="flex items-center gap-2 mt-3 flex-wrap">
           <button
-            onClick={() => handleExtend(30, 'monthly')}
+            onClick={() => handleExtend(30)}
             disabled={loading}
-            className="flex items-center space-x-1.5 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-bold rounded-xl hover:shadow-lg disabled:from-gray-300 disabled:to-gray-400 transition-all hover:scale-105 active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                       bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:scale-95
+                       transition-all disabled:opacity-50 border border-indigo-200"
           >
-            <Calendar className="w-4 h-4" />
-            <span>+30d</span>
+            <Plus className="w-3.5 h-3.5" />+30 дни
           </button>
-        ) : (
+
           <button
-            onClick={handleUnlock}
+            onClick={() => handleExtend(365)}
             disabled={loading}
-            className="flex items-center space-x-1.5 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-bold rounded-xl hover:shadow-lg disabled:from-gray-300 disabled:to-gray-400 transition-all hover:scale-105 active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                       bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:scale-95
+                       transition-all disabled:opacity-50 border border-indigo-200"
           >
-            <Unlock className="w-4 h-4" />
-            <span>Unlock</span>
+            <Zap className="w-3.5 h-3.5" />+1 година
           </button>
-        )}
 
-        <button
-          onClick={() => handleExtend(365, 'yearly')}
-          disabled={loading}
-          className="flex items-center space-x-1.5 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-sm font-bold rounded-xl hover:shadow-lg disabled:from-gray-300 disabled:to-gray-400 transition-all hover:scale-105 active:scale-95"
-        >
-          <Calendar className="w-4 h-4" />
-          <span>+365d</span>
-        </button>
-
-        {tenant.entitlement_status === 'active' ? (
           <button
-            onClick={handleLock}
+            onClick={handleSwitchPlan}
             disabled={loading}
-            className="flex items-center space-x-1.5 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-600 text-white text-sm font-bold rounded-xl hover:shadow-lg disabled:from-gray-300 disabled:to-gray-400 transition-all hover:scale-105 active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                       bg-slate-50 text-slate-600 hover:bg-slate-100 active:scale-95
+                       transition-all disabled:opacity-50 border border-slate-200"
           >
-            <Lock className="w-4 h-4" />
-            <span>Lock</span>
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+            → {tenant.plan_code === 'monthly' ? 'Годишен' : 'Месечен'}
           </button>
-        ) : null}
 
-        <button
-          onClick={handleSwitchPlan}
-          disabled={loading}
-          className="flex items-center space-x-1.5 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-fuchsia-600 text-white text-sm font-bold rounded-xl hover:shadow-lg disabled:from-gray-300 disabled:to-gray-400 transition-all hover:scale-105 active:scale-95"
-        >
-          <ArrowLeftRight className="w-4 h-4" />
-          <span className="hidden sm:inline">{tenant.plan_code === 'monthly' ? 'To Yearly' : 'To Monthly'}</span>
-          <span className="sm:hidden">Switch</span>
-        </button>
-
-        <button
-          onClick={handleResetPassword}
-          disabled={loading}
-          className="flex items-center space-x-1.5 px-4 py-2.5 bg-gradient-to-r from-gray-600 to-gray-700 text-white text-sm font-bold rounded-xl hover:shadow-lg disabled:from-gray-300 disabled:to-gray-400 transition-all hover:scale-105 active:scale-95"
-        >
-          <Mail className="w-4 h-4" />
-          <span className="hidden sm:inline">Reset Pass</span>
-          <span className="sm:hidden">Reset</span>
-        </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+            {/* Активирай — при expired/locked/grace */}
+            {(computed.isLocked || computed.isExpired || computed.isGrace) && (
+              <button
+                onClick={handleUnlock}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                           bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:scale-95
+                           transition-all disabled:opacity-50 border border-emerald-200"
+              >
+                <Unlock className="w-3.5 h-3.5" />Активирай (+30д)
+              </button>
+            )}
+            {/* Гратисен — само при active */}
+            {!computed.isLocked && !computed.isExpired && !computed.isGrace && (
+              <button
+                onClick={handleGrace}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                           bg-amber-50 text-amber-700 hover:bg-amber-100 active:scale-95
+                           transition-all disabled:opacity-50 border border-amber-200"
+              >
+                <Hourglass className="w-3.5 h-3.5" />Гратисен
+              </button>
+            )}
+            {/* Заключи — при active и grace */}
+            {!computed.isLocked && !computed.isExpired && (
+              <button
+                onClick={handleLock}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                           bg-red-50 text-red-600 hover:bg-red-100 active:scale-95
+                           transition-all disabled:opacity-50 border border-red-200"
+              >
+                <Lock className="w-3.5 h-3.5" />Заключи
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

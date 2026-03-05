@@ -12,6 +12,7 @@ returns table (
   id uuid,
   code text,
   name text,
+  owner_email text,
   plan_code text,
   subscription_status text,
   current_period_end timestamptz,
@@ -22,13 +23,22 @@ returns table (
 )
 language sql
 security definer
-set search_path = app, pg_catalog
+set search_path = app, auth, pg_catalog
 stable
 as $$
   select
     t.id,
     t.code,
     t.name,
+    (
+      select u.email
+      from app.memberships m
+      join auth.users u on u.id = m.user_id
+      where m.tenant_id = t.id
+        and m.role = 'owner'
+        and m.is_active = true
+      limit 1
+    ) as owner_email,
     coalesce(s.plan_code, 'monthly') as plan_code,
     coalesce(s.status, 'expired') as subscription_status,
     s.current_period_end,

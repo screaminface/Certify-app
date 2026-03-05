@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Lock } from 'lucide-react'
+import { Lock, Shield, LogIn, Loader2, XCircle } from 'lucide-react'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -34,7 +34,10 @@ export default function Login() {
           <h1 className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
             CERTIFY Admin
           </h1>
-          <p className="text-gray-500 mt-2 text-sm sm:text-base">🔐 Secure Dashboard Access</p>
+          <p className="flex items-center justify-center gap-2 text-gray-500 mt-2 text-sm sm:text-base">
+            <Shield className="w-4 h-4" />
+            Secure Dashboard Access
+          </p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-5">
@@ -68,7 +71,10 @@ export default function Login() {
 
           {error && (
             <div className="p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 rounded-xl animate-shake">
-              <p className="text-sm font-medium text-red-700">❌ {error}</p>
+              <p className="flex items-center gap-2 text-sm font-medium text-red-700">
+                <XCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </p>
             </div>
           )}
 
@@ -77,7 +83,17 @@ export default function Login() {
             disabled={loading}
             className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-lg rounded-xl hover:shadow-xl disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
-            {loading ? '🔄 Logging in...' : '🚀 Login'}
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Logging in...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <LogIn className="w-5 h-5" />
+                Login
+              </span>
+            )}
           </button>
         </form>
       </div>

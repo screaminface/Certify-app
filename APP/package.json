@@ -1,7 +1,7 @@
 {
   "name": "course-management-pwa",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,10 +11,10 @@
     "deploy": "set GITHUB_PAGES=true&& npm run build && gh-pages -d dist",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri:build": "tauri build && powershell -Command \"Get-Item src-tauri/target/release/bundle/nsis/CERTIFY_*-setup.exe,src-tauri/target/release/bundle/msi/CERTIFY_*.msi | Copy-Item -Destination releases/ -Force\"",
     "android:sync": "npm run build:android && npx cap sync android",
     "android:open": "npx cap open android",
-    "android:build:release": "npm run android:sync && cd android && gradlew assembleRelease && cd .. && powershell -Command \"$version = (Get-Content package.json | ConvertFrom-Json).version; Copy-Item android/app/build/outputs/apk/release/app-release-unsigned.apk -Destination releases/CERTIFY-v$version-android-release.apk\"",
+    "android:build:release": "npm run android:sync && cd android && gradlew assembleRelease",
     "android:build:debug": "npm run android:sync && cd android && gradlew assembleDebug && cd .. && powershell -Command \"$version = (Get-Content package.json | ConvertFrom-Json).version; Copy-Item android/app/build/outputs/apk/debug/app-debug.apk -Destination releases/CERTIFY-v$version-android-debug.apk\"",
     "android:build": "npm run android:build:debug"
   },

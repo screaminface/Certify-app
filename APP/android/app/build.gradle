@@ -7,8 +7,8 @@ android {
         applicationId "com.certify.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 230
+        versionName "2.3.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -20,6 +20,15 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    
+    // Rename APK output files
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def buildType = variant.buildType.name
+            def versionName = variant.versionName
+            outputFileName = "CERTIFY-v${versionName}-android-${buildType}.apk"
         }
     }
 }
@@ -34,12 +43,49 @@ dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core:$androidxCoreVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+}
+
+// Task to move APK to releases folder
+task moveApkToReleases {
+    doLast {
+        def releasesDir = file("../../releases")
+        if (!releasesDir.exists()) {
+            releasesDir.mkdirs()
+        }
+        
+        android.applicationVariants.all { variant ->
+            variant.outputs.all { output ->
+                def apkFile = output.outputFile
+                if (apkFile != null && apkFile.exists()) {
+                    def destFile = new File(releasesDir, apkFile.name)
+                    
+                    // Move file (copy + delete source)
+                    java.nio.file.Files.copy(
+                        apkFile.toPath(),
+                        destFile.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                    )
+                    apkFile.delete()
+                    
+                    println "✓ APK moved to: ${destFile.absolutePath}"
+                }
+            }
+        }
+    }
+}
+
+// Automatically run after assemble tasks
+tasks.whenTaskAdded { task ->
+    if (task.name == 'assembleDebug' || task.name == 'assembleRelease') {
+        task.finalizedBy moveApkToReleases
+    }
 }
 
 apply from: 'capacitor.build.gradle'
