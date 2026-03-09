@@ -8,6 +8,24 @@ param(
 
 Write-Host "`n🔨 Building Android APK ($BuildType)...`n" -ForegroundColor Cyan
 
+# Step 1: Build web assets
+Write-Host "📦 Step 1/3: Building web assets (npm run build)..." -ForegroundColor Yellow
+npm run build
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n❌ npm run build failed!`n" -ForegroundColor Red
+    exit 1
+}
+
+# Step 2: Copy web assets to Android
+Write-Host "`n📋 Step 2/3: Copying assets to Android (npx cap copy android)..." -ForegroundColor Yellow
+npx cap copy android
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n❌ cap copy failed!`n" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "`n🔧 Step 3/3: Building APK ($BuildType)...`n" -ForegroundColor Yellow
+
 # Navigate to android directory and build
 Push-Location android
 try {
