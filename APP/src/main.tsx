@@ -5,22 +5,8 @@ import './index.css';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-// Detect if running as a native Capacitor app (Android/iOS)
-const isNative = typeof (window as any).Capacitor !== 'undefined' && (window as any).Capacitor.isNativePlatform?.();
-
-// Unregister old Service Workers to prevent cache issues (PWA/browser only)
-async function unregisterServiceWorkers() {
-  if ('serviceWorker' in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    for (const registration of registrations) {
-      await registration.unregister();
-    }
-    if ('caches' in window) {
-      const cacheNames = await caches.keys();
-      await Promise.all(cacheNames.map(name => caches.delete(name)));
-    }
-  }
-}
+// Build-time flag: true when built with CAPACITOR_PLATFORM env var (build-android.ps1)
+const IS_CAPACITOR: boolean = import.meta.env.VITE_IS_CAPACITOR === true;
 
 // Clear localStorage on version change to prevent stale cache issues
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || '2.1.0';
@@ -28,11 +14,11 @@ const VERSION_KEY = 'spi.app.version';
 
 const storedVersion = localStorage.getItem(VERSION_KEY);
 if (storedVersion !== APP_VERSION) {
-  // In native Capacitor app: just clear caches silently, NO reload (causes white screen)
-  // In browser/PWA: unregister service workers and reload to pick up new bundle
-  if (!isNative) {
-    unregisterServiceWorkers().then(() => {
-      window.location.reload();
+  // Browser/PWA only: unregister old service workers and reload to pick up new SW bundle.
+  // On Capacitor Android: NEVER reload — the WebView has no SW and reload causes white screen.
+  if (!IS_CAPACITOR && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      Promise.all(regs.map(r => r.unregister())).then(() => window.location.reload());
     });
   }
   

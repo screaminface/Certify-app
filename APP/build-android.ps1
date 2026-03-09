@@ -10,6 +10,7 @@ Write-Host "`n🔨 Building Android APK ($BuildType)...`n" -ForegroundColor Cyan
 
 # Step 1: Build web assets
 Write-Host "📦 Step 1/3: Building web assets (npm run build)..." -ForegroundColor Yellow
+$env:CAPACITOR_PLATFORM = "android"
 npm run build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "`n❌ npm run build failed!`n" -ForegroundColor Red
