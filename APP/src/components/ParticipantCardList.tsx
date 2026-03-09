@@ -11,6 +11,7 @@ import { CompanyBadge } from "./ui/CompanyBadge";
 import { BulkActionBar } from "./ui/BulkActionBar";
 import { GroupSection } from "./ui/GroupSection";
 import { ArchivedGroupAccordion } from "./ui/ArchivedGroupAccordion";
+import { ArchiveGroupEditModal } from "./ui/ArchiveGroupEditModal";
 import { formatDateBG } from "../utils/medicalValidation";
 import { AlertModal } from "./ui/AlertModal";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -41,7 +42,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
   hasActiveFilters,
 }) => {
   const { t } = useLanguage();
-  const { updateParticipant } = useParticipants();
+  const { updateParticipant, updateArchivedParticipantStatus } = useParticipants();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(
     null
@@ -485,6 +486,16 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     title: '',
     message: '',
     variant: 'info'
+  });
+
+  const [archiveEditModal, setArchiveEditModal] = useState<{
+    isOpen: boolean;
+    courseStartDate: string;
+    groupNumber: number;
+  }>({
+    isOpen: false,
+    courseStartDate: '',
+    groupNumber: 0,
   });
 
   const handleGenerateCertificate = async (participant: Participant) => {
@@ -1008,6 +1019,13 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                     renderParticipantRow={renderArchivedParticipantCard}
                     mode="cards"
                     defaultExpanded={hasActiveFilters}
+                    onEditGroup={() =>
+                      setArchiveEditModal({
+                        isOpen: true,
+                        courseStartDate: group.courseStartDate,
+                        groupNumber: group.groupNumber || 0,
+                      })
+                    }
                   />
                 )
               )}
@@ -1049,6 +1067,22 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
         cancelText={t("common.cancel")}
         variant="danger"
       />
+
+      {/* Archive Group Edit Modal */}
+      {archiveEditModal.isOpen && (() => {
+        const modalGroup = completedGroupedByDate.find(
+          (g) => g.courseStartDate === archiveEditModal.courseStartDate
+        );
+        return (
+          <ArchiveGroupEditModal
+            isOpen={archiveEditModal.isOpen}
+            onClose={() => setArchiveEditModal((prev) => ({ ...prev, isOpen: false }))}
+            groupNumber={archiveEditModal.groupNumber}
+            participants={modalGroup?.participants ?? []}
+            updateArchivedParticipantStatus={updateArchivedParticipantStatus}
+          />
+        );
+      })()}
     </>
   );
 };

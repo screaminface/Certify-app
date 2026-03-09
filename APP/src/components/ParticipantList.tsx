@@ -7,6 +7,7 @@ import { CompanyBadge } from './ui/CompanyBadge';
 import { BulkActionBar } from './ui/BulkActionBar';
 import { GroupSection } from './ui/GroupSection';
 import { ArchivedGroupAccordion } from './ui/ArchivedGroupAccordion';
+import { ArchiveGroupEditModal } from './ui/ArchiveGroupEditModal';
 import { formatDateBG } from '../utils/medicalValidation';
 import { isGroupReadOnly, syncGroups } from '../utils/groupUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -40,7 +41,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   onFilterChange,
   groupRefreshKey = 0
 }) => {
-  const { updateParticipant } = useParticipants();
+  const { updateParticipant, updateArchivedParticipantStatus } = useParticipants();
   const { t } = useLanguage();
   const [sortBy, setSortBy] = useState<'courseStartDate' | 'groupNumber' | 'uniqueNumber'>('uniqueNumber');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -63,6 +64,16 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     title: '',
     message: '',
     variant: 'info'
+  });
+
+  const [archiveEditModal, setArchiveEditModal] = useState<{
+    isOpen: boolean;
+    courseStartDate: string;
+    groupNumber: number;
+  }>({
+    isOpen: false,
+    courseStartDate: '',
+    groupNumber: 0,
   });
 
   const handleNameMouseEnter = (e: React.MouseEvent, participant: Participant) => {
@@ -1060,6 +1071,13 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                     participants={participants}
                     renderParticipantRow={renderArchivedParticipantRow}
                     defaultExpanded={hasActiveFilters}
+                    onEditGroup={() =>
+                      setArchiveEditModal({
+                        isOpen: true,
+                        courseStartDate: group.courseStartDate,
+                        groupNumber: group.groupNumber || 0,
+                      })
+                    }
                   />
                 </div>
               ))}
@@ -1140,6 +1158,22 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
           </div>
         </div>
       )}
+
+      {/* Archive Group Edit Modal */}
+      {archiveEditModal.isOpen && (() => {
+        const modalGroup = completedGroupedByDate.find(
+          (g) => g.courseStartDate === archiveEditModal.courseStartDate
+        );
+        return (
+          <ArchiveGroupEditModal
+            isOpen={archiveEditModal.isOpen}
+            onClose={() => setArchiveEditModal((prev) => ({ ...prev, isOpen: false }))}
+            groupNumber={archiveEditModal.groupNumber}
+            participants={modalGroup?.participants ?? []}
+            updateArchivedParticipantStatus={updateArchivedParticipantStatus}
+          />
+        );
+      })()}
     </>
   );
 };

@@ -309,6 +309,47 @@ export function useParticipants() {
     await updateParticipantRecord(id, { completedOverride: null });
   };
 
+  // Update only the 4 status fields (sent/documents/handedOver/paid) for
+  // archived (completed + locked) groups — bypasses the general lock guard.
+  // All other fields are strictly ignored.
+  const updateArchivedParticipantStatus = async (
+    id: string,
+    updates: Partial<Pick<Participant, 'sent' | 'documents' | 'handedOver' | 'paid'>>
+  ): Promise<void> => {
+    const participant = await getParticipantById(id);
+    if (!participant) throw new Error('Participant not found');
+
+    // Guard: this function is ONLY for completed groups
+    const participantGroup = await getFirstGroupByCourseStartDate(participant.courseStartDate);
+    if (!participantGroup || participantGroup.status !== 'completed') {
+      throw new Error('updateArchivedParticipantStatus is only allowed for completed groups.');
+    }
+
+    const participantUpdates: Partial<Participant> = {};
+    if (updates.sent !== undefined) participantUpdates.sent = updates.sent;
+    if (updates.documents !== undefined) participantUpdates.documents = updates.documents;
+    if (updates.handedOver !== undefined) participantUpdates.handedOver = updates.handedOver;
+    if (updates.paid !== undefined) participantUpdates.paid = updates.paid;
+
+    // Recompute completedComputed
+    const newSent = participantUpdates.sent !== undefined ? participantUpdates.sent : participant.sent;
+    const newDocuments = participantUpdates.documents !== undefined ? participantUpdates.documents : participant.documents;
+    const newHandedOver = participantUpdates.handedOver !== undefined ? participantUpdates.handedOver : participant.handedOver;
+    const newPaid = participantUpdates.paid !== undefined ? participantUpdates.paid : participant.paid;
+    participantUpdates.completedComputed = newSent && newDocuments && newHandedOver && newPaid;
+    participantUpdates.updatedAt = new Date().toISOString();
+
+    // Track completedAt
+    const currentlyCompleted = participant.completedOverride !== null
+      ? participant.completedOverride
+      : participant.completedComputed;
+    if (!currentlyCompleted && participantUpdates.completedComputed) {
+      participantUpdates.completedAt = new Date().toISOString();
+    }
+
+    await updateParticipantRecord(id, participantUpdates);
+  };
+
   // Get participant by ID
   const getParticipant = async (id: string): Promise<Participant | undefined> => {
     return getParticipantById(id);
@@ -318,6 +359,7 @@ export function useParticipants() {
     participants,
     addParticipant,
     updateParticipant,
+    updateArchivedParticipantStatus,
     deleteParticipant,
     resetCompletedOverride,
     getParticipant

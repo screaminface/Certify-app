@@ -418,6 +418,11 @@ export default {
   'archive.groups': 'groups',
   'archive.participants': 'participants',
   'archive.viewDetails': 'View Details',
+
+  // Archive Group Status Edit
+  'archiveEdit.title': 'Edit Statuses — Group {number}',
+  'archiveEdit.desc': 'You can only change the statuses (Sent, Documents, Handed Over, Paid) of participants in this archived group.',
+  'archiveEdit.noParticipants': 'No participants in this group.',
   
   // Crypto / Secure Backup
   'crypto.passwordPlaceholder': 'Enter encryption password',

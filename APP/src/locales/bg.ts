@@ -419,6 +419,11 @@ export default {
   'archive.groups': 'групи',
   'archive.participants': 'участника',
   'archive.viewDetails': 'Виж детайли',
+
+  // Archive Group Status Edit
+  'archiveEdit.title': 'Редактирай статуси — Група {number}',
+  'archiveEdit.desc': 'Можете да промените само статусите (Изпратен, Документи, Предаден, Платен) на участниците в архивираната група.',
+  'archiveEdit.noParticipants': 'Няма участници в тази група.',
   
   // Crypto / Secure Backup
   'crypto.passwordPlaceholder': 'Въведете парола за декриптиране',
