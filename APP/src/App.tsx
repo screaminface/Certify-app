@@ -1,4 +1,5 @@
 import { FormEvent, useState, useMemo, useEffect } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useParticipants } from './hooks/useParticipants';
 import { useGroups } from './hooks/useGroups';
 import { useGroupSections } from './hooks/useGroupSections';
@@ -74,6 +75,9 @@ function AppContent() {
   const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [showAuthPassword, setShowAuthPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showResetPasswordConfirm, setShowResetPasswordConfirm] = useState(false);
   
   // Ensure data integrity on app startup
   useEffect(() => {
@@ -495,26 +499,46 @@ function AppContent() {
           <form onSubmit={handleUpdatePassword} className="space-y-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.newPassword')}</label>
-              <input
-                type="password"
-                value={resetPassword}
-                onChange={e => setResetPassword(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder={t('auth.passwordPlaceholder')}
-                autoComplete="new-password"
-              />
+              <div className="relative">
+                <input
+                  type={showResetPassword ? 'text' : 'password'}
+                  value={resetPassword}
+                  onChange={e => setResetPassword(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder={t('auth.passwordPlaceholder')}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowResetPassword(p => !p)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  tabIndex={-1}
+                >
+                  {showResetPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.confirmPassword')}</label>
-              <input
-                type="password"
-                value={resetPasswordConfirm}
-                onChange={e => setResetPasswordConfirm(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder={t('auth.passwordPlaceholder')}
-                autoComplete="new-password"
-              />
+              <div className="relative">
+                <input
+                  type={showResetPasswordConfirm ? 'text' : 'password'}
+                  value={resetPasswordConfirm}
+                  onChange={e => setResetPasswordConfirm(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder={t('auth.passwordPlaceholder')}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowResetPasswordConfirm(p => !p)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                  tabIndex={-1}
+                >
+                  {showResetPasswordConfirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
             </div>
 
             {resetError && <p className="text-sm text-red-600">{resetError}</p>}
@@ -585,14 +609,24 @@ function AppContent() {
             {!forgotMode && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">{t('auth.password')}</label>
-                <input
-                  type="password"
-                  value={authPassword}
-                  onChange={e => setAuthPassword(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder={t('auth.passwordPlaceholder')}
-                  autoComplete="current-password"
-                />
+                <div className="relative">
+                  <input
+                    type={showAuthPassword ? 'text' : 'password'}
+                    value={authPassword}
+                    onChange={e => setAuthPassword(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={t('auth.passwordPlaceholder')}
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthPassword(p => !p)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    tabIndex={-1}
+                  >
+                    {showAuthPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
             )}
 

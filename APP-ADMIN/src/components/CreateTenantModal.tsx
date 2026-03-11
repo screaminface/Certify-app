@@ -79,7 +79,6 @@ export default function CreateTenantModal({ onClose, onSuccess }: CreateTenantMo
         throw new Error(result.error || 'Failed to create tenant')
       }
 
-      console.log('Company created successfully!', result)
       let userMsg = ''
       if (result.user_created) {
         userMsg = `✅ Създаден нов акаунт за ${formData.email} с въведената парола.`

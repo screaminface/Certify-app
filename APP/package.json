@@ -50,11 +50,9 @@
     "postcss": "^8.4.32",
     "sharp": "^0.34.5",
     "tailwindcss": "^3.4.0",
-    "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "vite": "^5.0.8",
-    "vite-plugin-pwa": "^0.17.5",
-    "workbox-window": "^7.4.0"
+    "vite-plugin-pwa": "^0.17.5"
   },
   "description": "An offline-first Progressive Web App for managing course participants with automatic group assignment and unique number generation.",
   "main": "postcss.config.js",

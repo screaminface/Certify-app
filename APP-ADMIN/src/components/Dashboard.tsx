@@ -25,7 +25,6 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     
     setRefreshing(true)
     try {
-      console.log('Calling admin_get_all_tenants...')
       const { data, error } = await supabase.rpc('admin_get_all_tenants')
 
       if (error) {
@@ -52,7 +51,6 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         current_period_start: t.current_period_start || null,
       }))
 
-      console.log('✓ Loaded', formatted.length, 'tenants')
       setTenants(formatted)
     } catch (error) {
       console.error('Error loading tenants:', error)
