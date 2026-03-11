@@ -33,6 +33,7 @@ interface EntitlementContextType {
 }
 
 const CACHE_KEY = 'spi.entitlement.cache.v1';
+const CACHE_TTL_MS = 72 * 60 * 60 * 1000; // 3 days — after this, offline = read-only
 
 const defaultState: EntitlementState = {
   configured: false,
@@ -72,6 +73,23 @@ function loadCachedEntitlement(): EntitlementState {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return defaultState;
     const parsed = JSON.parse(raw) as EntitlementState;
+
+    // If cache is older than 72 hours and was active/grace — force read-only until server confirms.
+    // Also detect clock rollback (negative age) — treat as expired to prevent bypass.
+    if (parsed.lastCheckedAt) {
+      const age = Date.now() - new Date(parsed.lastCheckedAt).getTime();
+      const clockRolledBack = age < 0;
+      if ((clockRolledBack || age > CACHE_TTL_MS) && !parsed.readOnly) {
+        return {
+          ...defaultState,
+          ...parsed,
+          status: 'expired',
+          readOnly: true,
+          error: null
+        };
+      }
+    }
+
     return {
       ...defaultState,
       ...parsed,
@@ -182,6 +200,25 @@ export const EntitlementProvider: React.FC<{ children: React.ReactNode }> = ({ c
           msg.includes('failed to fetch') || msg.includes('load failed') ||
           msg.includes('network request') || msg.includes('timeout') ||
           msg.includes('econnrefused');
+        if (isNetworkError) {
+          // No internet = always force read-only (mandatory connectivity requirement).
+          // Also catches clock-rollback: negative age means clock was moved back → treat as expired.
+          const cacheAge = entitlement.lastCheckedAt
+            ? Date.now() - new Date(entitlement.lastCheckedAt).getTime()
+            : Infinity;
+          const clockRolledBack = cacheAge < 0;
+          const expiredState: EntitlementState = {
+            ...entitlement,
+            status: 'expired',
+            readOnly: true,
+            error: null,
+            lastCheckedAt: clockRolledBack ? entitlement.lastCheckedAt : entitlement.lastCheckedAt
+          };
+          setEntitlement(expiredState);
+          persistEntitlement(expiredState);
+          setAppReadOnlyMode(true);
+          return;
+        }
         if (!isNetworkError) {
           await supabase.auth.signOut();
           const nextState: EntitlementState = {
