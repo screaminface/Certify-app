@@ -52,7 +52,7 @@ export async function generateCertificate(
 
     // Fetch the template from public folder
     // Use BASE_URL to support both web and desktop builds
-    const templatePath = `${import.meta.env.BASE_URL}template.docx`;
+    const templatePath = `${import.meta.env.BASE_URL}template_original_test.docx`;
     const response = await fetch(templatePath);
     
     if (!response.ok) {
@@ -60,9 +60,11 @@ export async function generateCertificate(
     }
     
     const arrayBuffer = await response.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    console.log('[Template] fetched bytes:', uint8Array.length, 'Content-Type:', response.headers.get('content-type'));
 
     // Load the template
-    const zip = new PizZip(arrayBuffer);
+    const zip = new PizZip(uint8Array);
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
