@@ -608,7 +608,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
             onClick={() => setFormData({ ...formData, groupAssignmentMode: 'auto', selectedGroupId: '' })}
             className={`flex-1 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${
               formData.groupAssignmentMode === 'auto'
-                ? 'bg-slate-900 text-white border-slate-900'
+                ? 'bg-blue-700 text-white border-blue-700'
                 : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
             }`}
           >
@@ -619,7 +619,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
             onClick={() => setFormData({ ...formData, groupAssignmentMode: 'manual' })}
             className={`flex-1 px-3 py-2 rounded-xl border text-sm font-semibold transition-colors ${
               formData.groupAssignmentMode === 'manual'
-                ? 'bg-slate-900 text-white border-slate-900'
+                ? 'bg-blue-700 text-white border-blue-700'
                 : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
             }`}
           >
@@ -727,7 +727,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
       <button
         type="submit"
         disabled={isSubmitting || (formData.groupAssignmentMode === 'auto' && suggestedGroup?.status === 'completed')}
-        className="px-5 py-2 bg-slate-900 hover:bg-slate-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isSubmitting ? t('common.saving') : (participant ? t('modal.update') : t('common.add'))}
       </button>
@@ -747,7 +747,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
       <button
         type="submit"
         disabled={isSubmitting || (formData.groupAssignmentMode === 'auto' && suggestedGroup?.status === 'completed')}
-        className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex-1 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isSubmitting ? t('common.saving') : (participant ? t('modal.update') : t('common.add'))}
       </button>
