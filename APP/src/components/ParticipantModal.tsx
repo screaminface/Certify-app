@@ -393,10 +393,26 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         <label className="block text-sm font-medium text-slate-700 mb-1">
           {t('modal.companyName')} *
         </label>
+
+        {/* Desktop: native select */}
+        <select
+          value={formData.companyName}
+          onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+          className={`hidden sm:block w-full px-3.5 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${
+            errors.companyName ? 'border-red-400' : 'border-slate-200'
+          }`}
+        >
+          <option value="">{t('modal.selectCompany')}</option>
+          <option value="Egida">Egida</option>
+          <option value="D-Max">D-Max</option>
+          <option value="Multiforce">Multiforce</option>
+        </select>
+
+        {/* Mobile: bottom sheet trigger */}
         <button
           type="button"
           onClick={() => setCompanyPickerOpen(true)}
-          className={`w-full px-3.5 py-2.5 border rounded-xl text-left flex items-center justify-between bg-white transition-colors ${
+          className={`sm:hidden w-full px-3.5 py-2.5 border rounded-xl text-left flex items-center justify-between bg-white transition-colors ${
             errors.companyName ? 'border-red-400' : formData.companyName ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'
           }`}
         >
@@ -407,22 +423,23 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
+
         {errors.companyName && (
           <p className="text-red-600 text-sm mt-1">{errors.companyName}</p>
         )}
       </div>
 
-      {/* Company Picker Bottom Sheet */}
+      {/* Company Picker Bottom Sheet (mobile only) */}
       {companyPickerOpen && (
         <>
           <div
             className="fixed inset-0 z-[70]"
-            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+            style={{ background: 'rgba(0,0,0,0.45)' }}
             onClick={() => setCompanyPickerOpen(false)}
           />
           <div
             className="fixed inset-x-0 bottom-0 z-[71] bg-white rounded-t-3xl shadow-2xl"
-            style={{ maxHeight: '60dvh' }}
+            style={{ maxHeight: '60vh' }}
           >
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-slate-300" />
@@ -741,18 +758,16 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-50 transition-opacity duration-300"
+        className="fixed inset-0 z-[55] transition-opacity duration-300"
         style={{
           opacity: visible ? 1 : 0,
-          background: 'rgba(0,0,0,0.35)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          background: 'rgba(0,0,0,0.45)',
         }}
         onClick={onClose}
       />
 
       {/* ── DESKTOP (sm+): Centered modal ── */}
-      <div className="hidden sm:flex fixed inset-0 z-50 items-center justify-center p-4">
+      <div className="hidden sm:flex fixed inset-0 z-[56] items-center justify-center p-4">
         <div
           className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden transition-all duration-300"
           style={{ opacity: visible ? 1 : 0, transform: visible ? 'scale(1)' : 'scale(0.96)' }}
@@ -790,9 +805,9 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
 
       {/* ── MOBILE: Bottom Sheet ── */}
       <div
-        className="sm:hidden fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white rounded-t-3xl shadow-2xl"
+        className="sm:hidden fixed inset-x-0 bottom-0 z-[60] flex flex-col bg-white rounded-t-3xl shadow-2xl overflow-hidden"
         style={{
-          maxHeight: '92dvh',
+          maxHeight: '92vh',
           transform: visible ? 'translateY(0)' : 'translateY(100%)',
           transition: 'transform 0.32s cubic-bezier(0.4, 0, 0.2, 1)',
         }}

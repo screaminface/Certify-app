@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide the browser's built-in password reveal button (Edge/WebView2) */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
 @layer utilities {
   .animate-scale-up {
     animation: scaleUp 0.2s ease-out;

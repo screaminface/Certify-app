@@ -887,7 +887,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
       />
 
       {/* Group Sections */}
-      <div className="space-y-4 pb-32">
+      <div className="space-y-4 pb-24">
         {/* Active Groups Section */}
         {(participantsByStatus.active.length > 0 || !hasActiveFilters) && (
         <GroupSection
