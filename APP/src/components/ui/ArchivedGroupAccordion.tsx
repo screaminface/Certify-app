@@ -112,7 +112,25 @@ export const ArchivedGroupAccordion: React.FC<ArchivedGroupAccordionProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
             <div className="text-left">
-              <div className="font-semibold text-slate-900">{t('group.group')} {groupNumber}</div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-900">{t('group.group')} {groupNumber}</span>
+                {(() => {
+                  const seqs = participants
+                    .map(p => p.uniqueNumber?.split('-')[1])
+                    .filter((s): s is string => Boolean(s))
+                    .map(Number)
+                    .filter(n => !isNaN(n));
+                  if (seqs.length === 0) return null;
+                  const min = Math.min(...seqs);
+                  const max = Math.max(...seqs);
+                  const label = min === max ? `${min}` : `${min}-${max}`;
+                  return (
+                    <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded-full text-xs font-semibold">
+                      {label}
+                    </span>
+                  );
+                })()}
+              </div>
               <div className="text-sm text-slate-600">
                 {formatDateBG(courseStartDate)} - {formatDateBG(courseEndDate)}
               </div>
