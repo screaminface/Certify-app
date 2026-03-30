@@ -11,7 +11,7 @@
     "deploy": "set GITHUB_PAGES=true&& npm run build && gh-pages -d dist",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build && powershell -Command \"Get-Item src-tauri/target/release/bundle/nsis/CERTIFY_*-setup.exe,src-tauri/target/release/bundle/msi/CERTIFY_*.msi | Copy-Item -Destination releases/ -Force\"",
+    "tauri:build": "tauri build && powershell -Command \"Get-ChildItem releases/ -File | Where-Object { $_.Name -match '^CERTIFY' } | Remove-Item -Force; Get-Item src-tauri/target/release/bundle/nsis/CERTIFY_*-setup.exe,src-tauri/target/release/bundle/msi/CERTIFY_*.msi | Copy-Item -Destination releases/ -Force\"",
     "android:sync": "npm run build:android && npx cap sync android",
     "android:open": "npx cap open android",
     "android:build:release": "npm run android:sync && cd android && gradlew assembleRelease",

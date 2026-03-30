@@ -1,5 +1,11 @@
 apply plugin: 'com.android.application'
 
+// Read version from package.json automatically
+def packageJson = new groovy.json.JsonSlurper().parse(file("../../package.json"))
+def appVersionName = packageJson.version
+def appVersionParts = appVersionName.tokenize('.')
+def appVersionCode = appVersionParts[0].toInteger() * 10000 + appVersionParts[1].toInteger() * 100 + appVersionParts[2].toInteger()
+
 android {
     namespace = "com.certify.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +13,8 @@ android {
         applicationId "com.certify.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 251
-        versionName "2.5.1"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
