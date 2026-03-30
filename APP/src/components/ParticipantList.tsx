@@ -182,6 +182,20 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       .sort((a,b) => a.group.courseStartDate.localeCompare(b.group.courseStartDate));
   }, [participantsByStatus.active, groups, groupMap]);
 
+  // Compute unique number sequence range for the active group (desktop-only badge)
+  const activeSeqRange = useMemo(() => {
+    if (activeGroupedByDate.length !== 1) return undefined;
+    const seqs = activeGroupedByDate[0].participants
+      .map(p => p.uniqueNumber?.split('-')[1])
+      .filter((s): s is string => Boolean(s))
+      .map(Number)
+      .filter(n => !isNaN(n));
+    if (seqs.length === 0) return undefined;
+    const min = Math.min(...seqs);
+    const max = Math.max(...seqs);
+    return min === max ? `${min}` : `${min}-${max}`;
+  }, [activeGroupedByDate]);
+
   // Group planned participants by courseStartDate
   const plannedGroupedByDate = useMemo(() => {
     const grouped = new Map<string, { group: Group; participants: Participant[] }>();
@@ -844,6 +858,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             count={groupStats.active.count}
             groupNumbers={activeGroupedByDate.length <= 1 ? activeGroupNumber : []}
             dateRange={activeGroupedByDate.length <= 1 ? activeDateRange : undefined}
+            seqRange={activeGroupedByDate.length <= 1 ? activeSeqRange : undefined}
             participantCount={participantsByStatus.active.length}
             isCollapsed={collapsedSections.active}
             onToggle={() => toggleSection('active')}

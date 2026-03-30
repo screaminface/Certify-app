@@ -7,6 +7,7 @@ interface GroupSectionProps {
   count: number;
   groupNumbers?: number[]; // Optional array of group numbers to display
   dateRange?: string; // Optional date range to display (e.g., "26.01.2026 - 02.02.2026")
+  seqRange?: string; // Optional unique number sequence range (e.g., "32-34"), desktop-only
   participantCount?: number; // Optional participant count to display on the right
   isCollapsed: boolean;
   onToggle: () => void;
@@ -19,6 +20,7 @@ export function GroupSection({
   count,
   groupNumbers,
   dateRange,
+  seqRange,
   participantCount,
   isCollapsed,
   onToggle,
@@ -87,6 +89,13 @@ export function GroupSection({
             {dateRange && (
               <span className="text-sm font-medium opacity-75">
                 {dateRange}
+              </span>
+            )}
+            
+            {/* Unique number sequence range (desktop-only badge, active groups only) */}
+            {seqRange && (
+              <span className={`hidden md:inline-flex px-2.5 py-0.5 ${config.countBg} ${config.countText} rounded-full text-xs font-semibold`}>
+                {seqRange}
               </span>
             )}
             
