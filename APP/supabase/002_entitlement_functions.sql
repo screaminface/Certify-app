@@ -41,8 +41,21 @@ begin
     end;
 
     if latest_sub.status in ('active', 'trialing') then
-      target_status := 'active';
-      target_read_only := false;
+      -- Even if status is 'active', check whether the period has actually ended.
+      -- Without this, a subscription set to 'active' never expires automatically.
+      if target_period_end is not null and now() > target_period_end then
+        -- Period has ended → evaluate grace window
+        if target_grace_until is not null and now() <= target_grace_until then
+          target_status := 'grace';
+          target_read_only := false;
+        else
+          target_status := 'expired';
+          target_read_only := true;
+        end if;
+      else
+        target_status := 'active';
+        target_read_only := false;
+      end if;
     elsif latest_sub.status in ('past_due', 'unpaid', 'paused', 'incomplete', 'canceled', 'expired') then
       if target_grace_until is not null and now() <= target_grace_until then
         target_status := 'grace';
