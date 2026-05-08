@@ -60,9 +60,19 @@ fn check_and_clear_cache_if_needed(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .setup(|app| {
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init());
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.set_focus();
+            let _ = window.unminimize();
+        }
+    }));
+
+    builder.setup(|app| {
             // Check version and clear cache if needed
             check_and_clear_cache_if_needed(&app.handle());
             
