@@ -388,6 +388,64 @@ export async function checkForGaps(): Promise<string | null> {
 export function isValidUniqueNumberFormat(uniqueNumber: string): boolean {
     return /^\d{4}-\d+$/.test(uniqueNumber);
 }
+
+/**
+ * Normalize unique numbers for an active group.
+ *
+ * Business rules:
+ * - Collect all participants in the group sorted by createdAt ASC, then id ASC.
+ * - Participants who already have a uniqueNumber keep it (existing certificates are not invalidated).
+ * - Participants WITHOUT a uniqueNumber are assigned the next sequential numbers from the
+ *   current global max (double increment: prefix+1, seq+1 per person).
+ * - Settings are updated to the new max after assignment.
+ * - Planned / archived participants are never touched.
+ *
+ * Call this after moving a participant from planned → active.
+ */
+export async function normalizeActiveGroupUniqueNumbers(groupCourseStartDate: string): Promise<void> {
+  const participants = await db.participants
+    .where('courseStartDate')
+    .equals(groupCourseStartDate)
+    .toArray();
+
+  // Sort deterministically: createdAt ASC, then id ASC
+  participants.sort((a, b) => {
+    const timeA = new Date(a.createdAt || 0).getTime();
+    const timeB = new Date(b.createdAt || 0).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    return (a.id || '').localeCompare(b.id || '');
+  });
+
+  const needingNumbers = participants.filter(p => !p.uniqueNumber);
+  if (needingNumbers.length === 0) return;
+
+  const settings = await db.settings.get(1);
+  if (!settings) throw new Error('Settings not initialized');
+
+  let currentPrefix = settings.lastUniquePrefix;
+  let currentSeq = settings.lastUniqueSeq;
+
+  const max = await getGlobalMaxUniqueNumber();
+  if (max) {
+    if (max.prefix > currentPrefix) {
+      currentPrefix = max.prefix;
+      currentSeq = max.seq;
+    } else if (max.prefix === currentPrefix && max.seq > currentSeq) {
+      currentSeq = max.seq;
+    }
+  }
+
+  for (const p of needingNumbers) {
+    currentPrefix++;
+    currentSeq++;
+    await db.participants.update(p.id!, { uniqueNumber: formatUniqueNumber(currentPrefix, currentSeq) });
+  }
+
+  await db.settings.update(1, {
+    lastUniquePrefix: currentPrefix,
+    lastUniqueSeq: currentSeq,
+  });
+}
 /**
  * Clear unique numbers for all participants in a group
  * Used when moving a group from Active -> Planned

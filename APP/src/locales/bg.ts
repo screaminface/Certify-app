@@ -136,6 +136,7 @@ export default {
   'modal.cannotSkipGap': 'Не може да прескочите дупката! Първо попълнете {number} или оставете полето празно за автоматично присвояване',
   'modal.medicalDateCourseValidation': 'Медицинският преглед трябва да е преди началото на курса и в рамките на 6 месеца.',
   'modal.completedGroupError': 'Не може да добавяте участник към приключила група',
+  'modal.medicalInvalidForPlanned': 'Медицинското не е валидно за избраната планирана група.',
   'modal.update': 'Обнови',
   'modal.periodClosed': 'Този период вече е приключен.',
   'modal.cannotAddComp': 'Не може да добавяте участник към приключила група ({date}).',

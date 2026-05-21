@@ -136,6 +136,7 @@ export default {
   'modal.cannotSkipGap': 'Cannot skip gap! Must fill {number} first or leave empty for auto-assign',
   'modal.medicalDateCourseValidation': 'Medical examination must be before course start and within 6 months.',
   'modal.completedGroupError': 'Cannot add participant to a completed group',
+  'modal.medicalInvalidForPlanned': 'Medical date is not valid for the selected planned group.',
   'modal.update': 'Update',
   'modal.periodClosed': 'This period is already closed.',
   'modal.cannotAddComp': 'Cannot add participant to a completed group ({date}).',

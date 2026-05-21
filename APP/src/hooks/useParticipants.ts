@@ -165,6 +165,33 @@ export function useParticipants() {
     if (updates.birthPlace !== undefined) participantUpdates.birthPlace = updates.birthPlace;
     if (updates.citizenship !== undefined) participantUpdates.citizenship = updates.citizenship;
 
+    // Handle manual group move: courseStartDate supplied directly without changing medicalDate
+    if (
+      updates.courseStartDate !== undefined &&
+      updates.courseStartDate !== participant.courseStartDate &&
+      (!updates.medicalDate || updates.medicalDate === participant.medicalDate)
+    ) {
+      participantUpdates.courseStartDate = updates.courseStartDate;
+      participantUpdates.courseEndDate = updates.courseEndDate ?? participant.courseEndDate;
+
+      const oldGroup = await getFirstGroupByCourseStartDate(participant.courseStartDate);
+      const newGroup = await getFirstGroupByCourseStartDate(updates.courseStartDate);
+      const oldStatus = oldGroup?.status ?? 'planned';
+      const newStatus = newGroup?.status ?? 'planned';
+
+      if (newStatus === 'active' && oldStatus !== 'active') {
+        // Moving to active group: assign unique number (gap-fill or next)
+        const gapNum = await checkForGaps();
+        participantUpdates.uniqueNumber = gapNum ?? await generateNextUniqueNumber();
+      } else if (oldStatus === 'active' && newStatus === 'planned') {
+        // Moving from active to planned: clear unique number and schedule realign
+        if (participant.uniqueNumber) {
+          shouldRealignAfterUpdate = participant.uniqueNumber;
+        }
+        participantUpdates.uniqueNumber = '';
+      }
+    }
+
     // If medical date changed, recalculate course dates
     if (updates.medicalDate && updates.medicalDate !== participant.medicalDate) {
       // Use getSuggestedGroup logic (same as addParticipant) to respect active group priority

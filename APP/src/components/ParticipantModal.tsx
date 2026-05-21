@@ -57,7 +57,17 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
   });
 
   const activeGroup = useLiveQuery(() => getActiveGroup(), []);
-  const allGroups = useLiveQuery(() => db.groups.orderBy('groupNumber').toArray(), []);
+  const allGroups = useLiveQuery(
+    () => db.groups.toArray().then(gs =>
+      gs.sort((a, b) => {
+        if (a.groupNumber === null && b.groupNumber === null) return 0;
+        if (a.groupNumber === null) return 1;
+        if (b.groupNumber === null) return -1;
+        return a.groupNumber - b.groupNumber;
+      })
+    ),
+    []
+  );
   const [suggestedGroup, setSuggestedGroup] = useState<{ groupNumber: number | null; courseStartDate: string; courseEndDate: string; status: 'active' | 'planned' | 'completed' } | null>(null);
 
   // Calculate suggested group when medical date changes
@@ -247,67 +257,73 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const isValid = await validateForm();
-    if (!isValid) return;
 
-    // Block adding participants to completed groups
-    if (formData.groupAssignmentMode === 'manual' && formData.selectedGroupId) {
-      const selectedGroupNum = parseInt(formData.selectedGroupId, 10);
-      const selectedGroup = allGroups?.find(g => g.groupNumber === selectedGroupNum);
-      
-      if (selectedGroup?.status === 'completed') {
-        setErrors(prev => ({
-          ...prev,
-          selectedGroupId: t('modal.completedGroupError')
-        }));
-        return;
+    try {
+      const isValid = await validateForm();
+      if (!isValid) return;
+
+      // Block adding participants to completed groups
+      if (formData.groupAssignmentMode === 'manual' && formData.selectedGroupId) {
+        const selectedGroup = allGroups?.find(g => g.id === formData.selectedGroupId);
+        
+        if (selectedGroup?.status === 'completed') {
+          setErrors(prev => ({
+            ...prev,
+            selectedGroupId: t('modal.completedGroupError')
+          }));
+          return;
+        }
+        
+        // Validate medical date is before course start and within 6 months
+        if (!isMedicalValidForCourse(formData.medicalDate, selectedGroup!.courseStartDate)) {
+          setErrors(prev => ({
+            ...prev,
+            medicalDate: selectedGroup!.status === 'planned'
+              ? t('modal.medicalInvalidForPlanned')
+              : t('modal.medicalDateCourseValidation')
+          }));
+          return;
+        }
+      } else {
+        // Auto mode - validate with computed course start date
+        if (!isMedicalValidForCourse(formData.medicalDate, computedDates.courseStartDate)) {
+          setErrors(prev => ({
+            ...prev,
+            medicalDate: t('modal.medicalDateCourseValidation')
+          }));
+          return;
+        }
       }
-      
-      // Validate medical date is before course start and within 6 months
-      if (!isMedicalValidForCourse(formData.medicalDate, selectedGroup!.courseStartDate)) {
-        setErrors(prev => ({
-          ...prev,
-          medicalDate: t('modal.medicalDateCourseValidation')
-        }));
-        return;
+
+      // When editing an existing participant with manual group selection, skip the
+      // "differs from auto-suggestion" warning — the user is intentionally reassigning.
+      if (!participant && formData.groupAssignmentMode === 'manual' && formData.selectedGroupId) {
+        const selectedGroup = allGroups?.find(g => g.id === formData.selectedGroupId);
+        const suggested = await getSuggestedGroup(formData.medicalDate);
+        
+        if (suggested.group && suggested.group.id !== formData.selectedGroupId) {
+          setWarningModal({
+            isOpen: true,
+            message: t('modal.groupWarningMessage', {
+              selected: String(selectedGroup?.groupNumber ?? '-'),
+              selectedDate: formatDateBG(selectedGroup!.courseStartDate),
+              suggested: String(suggested.group.groupNumber ?? ''),
+              suggestedDate: formatDateBG(suggested.group.courseStartDate)
+            }),
+            onConfirm: () => {
+              setWarningModal({ isOpen: false, message: '', onConfirm: () => {} });
+              performSave();
+            }
+          });
+          return;
+        }
       }
-    } else {
-      // Auto mode - validate with computed course start date
-      if (!isMedicalValidForCourse(formData.medicalDate, computedDates.courseStartDate)) {
-        setErrors(prev => ({
-          ...prev,
-          medicalDate: t('modal.medicalDateCourseValidation')
-        }));
-        return;
-      }
+
+      await performSave();
+    } catch (err) {
+      console.error('Manual move save failed:', err);
+      setErrors(prev => ({ ...prev, selectedGroupId: (err as Error).message }));
     }
-
-    // Check if manual group assignment differs from suggested
-    if (formData.groupAssignmentMode === 'manual' && formData.selectedGroupId) {
-      const selectedGroupNum = parseInt(formData.selectedGroupId, 10);
-      const suggested = await getSuggestedGroup(computedDates.courseStartDate);
-      
-      if (suggested.group && suggested.group.groupNumber !== selectedGroupNum) {
-        const selectedGroup = allGroups?.find(g => g.groupNumber === selectedGroupNum);
-        setWarningModal({
-          isOpen: true,
-          message: t('modal.groupWarningMessage', {
-            selected: String(selectedGroupNum),
-            selectedDate: formatDateBG(selectedGroup!.courseStartDate),
-            suggested: String(suggested.group.groupNumber ?? ''),
-            suggestedDate: formatDateBG(suggested.group.courseStartDate)
-          }),
-          onConfirm: () => {
-            setWarningModal({ isOpen: false, message: '', onConfirm: () => {} });
-            performSave();
-          }
-        });
-        return;
-      }
-    }
-
-    await performSave();
   };
 
   const performSave = async () => {
@@ -316,7 +332,21 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
       // Normalize whitespace: replace multiple spaces with single space, trim
       const normalizeName = (name: string) => 
         name.trim().replace(/\s+/g, ' ').normalize('NFC');
-      
+
+      // Build group override fields for manual group moves on existing participants
+      const groupMoveFields: Partial<Participant> = {};
+      if (participant && formData.groupAssignmentMode === 'manual' && formData.selectedGroupId) {
+        const selectedGroup = allGroups?.find(g => g.id === formData.selectedGroupId);
+        if (selectedGroup) {
+          groupMoveFields.courseStartDate = selectedGroup.courseStartDate;
+          groupMoveFields.courseEndDate = selectedGroup.courseEndDate;
+        }
+      }
+
+      // When changing the group, do NOT forward uniqueNumber from the form.
+      // updateParticipant's group-move logic will clear it (→ planned) or assign it (→ active).
+      const isGroupMove = Object.keys(groupMoveFields).length > 0;
+
       const data = {
         companyName: formData.companyName.trim(),
         personName: normalizeName(formData.personName),
@@ -324,7 +354,8 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         birthPlace: formData.birthPlace.trim(),
         citizenship: formData.citizenship.trim() || 'българско',
         medicalDate: formData.medicalDate,
-        uniqueNumber: formData.uniqueNumber.trim() || gapNumber || undefined
+        ...(isGroupMove ? {} : { uniqueNumber: formData.uniqueNumber.trim() || gapNumber || undefined }),
+        ...groupMoveFields
       };
 
       if (participant) {
@@ -667,17 +698,22 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
             className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
             <option value="">{t('modal.selectGroup')}</option>
-            {activeGroup && (
-              <option value={(activeGroup.groupNumber || '').toString()}>
-                {t('group.number')} {activeGroup.groupNumber || '-'} - {formatDateBG(activeGroup.courseStartDate)} ({t('modal.active')})
-              </option>
-            )}
-            {allGroups?.filter(g => g.status === 'planned').map((group) => (
-              <option key={group.id} value={(group.groupNumber || '').toString()}>
-                {t('group.number')} {group.groupNumber || '-'} - {formatDateBG(group.courseStartDate)} ({t('modal.planned')})
-              </option>
-            ))}
+            {[
+              ...(activeGroup ? [activeGroup] : []),
+              ...(allGroups?.filter(g => g.status === 'planned') ?? [])
+            ]
+              .sort((a, b) => new Date(a.courseStartDate).getTime() - new Date(b.courseStartDate).getTime())
+              .map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.status === 'active'
+                    ? `${t('group.number')} ${group.groupNumber || '-'} - ${formatDateBG(group.courseStartDate)} (${t('modal.active')})`
+                    : `${formatDateBG(group.courseStartDate)} – ${formatDateBG(group.courseEndDate)} (${t('modal.planned')})`}
+                </option>
+              ))}
           </select>
+        )}
+        {errors.selectedGroupId && (
+          <p className="text-red-600 text-sm mt-1">{errors.selectedGroupId}</p>
         )}
       </div>
 
@@ -686,20 +722,32 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         <label className="block text-sm font-medium text-slate-700 mb-1">
           {t('modal.uniqueNumberAuto')}
         </label>
-        {gapNumber && participant && (
-          <div className="mb-2 p-2 bg-amber-50 border border-amber-300 rounded-xl">
-            <p className="text-amber-800 text-sm font-medium">
-              ⚠️ Участникът ще получи попълващ номер: {gapNumber}
-            </p>
-          </div>
-        )}
-        {participant && suggestedGroup?.status === 'active' && nextUniqueNumber && !gapNumber && (
-          <div className="mb-2 p-2 bg-blue-50 border border-blue-300 rounded-xl">
-            <p className="text-blue-800 text-sm font-medium">
-              ℹ️ Преместване в активна група → Уникален номер: <span className="font-bold">{nextUniqueNumber}</span>
-            </p>
-          </div>
-        )}
+        {(() => {
+          // Determine effective group status: manual selection overrides auto-suggestion
+          const manualGroup = formData.groupAssignmentMode === 'manual' && formData.selectedGroupId
+            ? allGroups?.find(g => g.id === formData.selectedGroupId)
+            : null;
+          const isManualPlanned = manualGroup?.status === 'planned';
+          const effectiveStatus = manualGroup ? manualGroup.status : suggestedGroup?.status;
+          return (
+            <>
+              {gapNumber && participant && !isManualPlanned && (
+                <div className="mb-2 p-2 bg-amber-50 border border-amber-300 rounded-xl">
+                  <p className="text-amber-800 text-sm font-medium">
+                    ⚠️ Участникът ще получи попълващ номер: {gapNumber}
+                  </p>
+                </div>
+              )}
+              {participant && effectiveStatus === 'active' && nextUniqueNumber && !gapNumber && (
+                <div className="mb-2 p-2 bg-blue-50 border border-blue-300 rounded-xl">
+                  <p className="text-blue-800 text-sm font-medium">
+                    ℹ️ Преместване в активна група → Уникален номер: <span className="font-bold">{nextUniqueNumber}</span>
+                  </p>
+                </div>
+              )}
+            </>
+          );
+        })()}
         <input
           type="text"
           value={formData.uniqueNumber}
