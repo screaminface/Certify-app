@@ -242,7 +242,20 @@ export async function closeActiveGroup(): Promise<void> {
   }
   
   const now = new Date().toISOString();
-  
+
+  // An empty group has nothing to archive — completing it would only leave
+  // an invisible number-squatter (empty completed groups don't render but
+  // still block their group number). Delete it instead.
+  const participantCount = await db.participants
+    .where('courseStartDate')
+    .equals(activeGroup.courseStartDate)
+    .count();
+  if (participantCount === 0) {
+    console.log(`Closing empty active group №${activeGroup.groupNumber} — deleting instead of archiving`);
+    await db.groups.delete(activeGroup.id);
+    return;
+  }
+
   // Determine group number if not already set (re-closing a restored group keeps its number)
   let finalGroupNumber = activeGroup.groupNumber;
   
@@ -566,6 +579,50 @@ export async function syncGroups(): Promise<void> {
     }
     // If still > 2, it means we have > 2 USED groups. We keep them (Soft limit).
   }
+
+  // 7. Remove empty completed groups. The dashboard's completed section only
+  // renders groups that still have participants, so an empty completed group
+  // is INVISIBLE — yet it keeps holding its group number, pushing the next
+  // activation to №2/№3 (протокол № jumps by 5 for no visible reason).
+  // Nothing is lost: no participants, no issued numbers behind it.
+  // Counts are recomputed fresh — the date-sanitizer above may have moved
+  // participants to another period.
+  const freshParticipants = await db.participants.toArray();
+  const freshCounts = new Map<string, number>();
+  freshParticipants.forEach(p => {
+    freshCounts.set(p.courseStartDate, (freshCounts.get(p.courseStartDate) || 0) + 1);
+  });
+  const groupsAfterPrune = await db.groups.toArray();
+  for (const g of groupsAfterPrune) {
+    if (g.status === 'completed' && (freshCounts.get(g.courseStartDate) || 0) === 0) {
+      console.log(`Removing empty completed group №${g.groupNumber} (${g.courseStartDate}) — freeing its number`);
+      await db.groups.delete(g.id);
+    }
+  }
+
+  // 8. Realign the active group's number to the smallest free slot — heals
+  // databases where a ghost group already inflated the number. Safe while
+  // the group is active: the protocol number (№ × 5) is always derived
+  // live from groupNumber, nothing has been printed for an open group.
+  const groupsForRealign = await db.groups.toArray();
+  const activeForRealign = groupsForRealign.find(g => g.status === 'active');
+  if (activeForRealign && activeForRealign.groupNumber !== null && activeForRealign.groupNumber !== undefined) {
+    const otherNumbers = new Set(
+      groupsForRealign
+        .filter(g => g.id !== activeForRealign.id)
+        .map(g => g.groupNumber)
+        .filter((n): n is number => n !== null && n !== undefined && n > 0)
+    );
+    let candidate = 1;
+    while (otherNumbers.has(candidate)) candidate++;
+    if (candidate < activeForRealign.groupNumber) {
+      console.log(`Realigning active group number ${activeForRealign.groupNumber} → ${candidate}`);
+      await db.groups.update(activeForRealign.id, {
+        groupNumber: candidate,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  }
 }
 
 /**
@@ -796,9 +853,12 @@ export async function setActiveToPlanned(): Promise<void> {
   await db.groups.update(activeGroup.id, {
     status: 'planned',
     updatedAt: now,
-    activatedAt: undefined
+    activatedAt: undefined,
+    // Planned groups must not hold a number (same rule as the swap path in
+    // activateGroupDirectly) — a kept number would block the next activation
+    groupNumber: null
   });
-  
+
   // Clear unique numbers
   await clearUniqueNumbersForGroup(activeGroup.courseStartDate);
 }

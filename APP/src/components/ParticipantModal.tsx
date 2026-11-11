@@ -7,6 +7,7 @@ import { isMedicalValidForCourse, formatDateBG } from '../utils/medicalValidatio
 import { getActiveGroup, getSuggestedGroup } from '../utils/groupUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ConfirmModal } from './ui/ConfirmModal';
+import { isValidEGN, isValidLNCH, isBulgarianCitizenship } from '../utils/inputValidation';
 import { CompanySelect } from './ui/CompanySelect';
 import { COMPANIES } from '../constants/companies';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -217,6 +218,10 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
       newErrors.egn = t('modal.egnRequired');
     } else if (!/^\d{10}$/.test(formData.egn)) {
       newErrors.egn = t('modal.egnInvalid');
+    } else if (isBulgarianCitizenship(formData.citizenship) && !isValidEGN(formData.egn)) {
+      // Bulgarian citizen: a wrong checksum/date is a typo — block it.
+      // Foreigners (ЛНЧ) only get a warning under the field, see egnWarning.
+      newErrors.egn = t('modal.egnChecksumInvalid');
     }
 
     if (!formData.birthPlace.trim()) {
@@ -547,8 +552,15 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
           maxLength={10}
           className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        {errors.egn && (
+        {errors.egn ? (
           <p className="text-red-600 text-sm mt-1">{errors.egn}</p>
+        ) : (
+          /^\d{10}$/.test(formData.egn) &&
+          !isBulgarianCitizenship(formData.citizenship) &&
+          !isValidEGN(formData.egn) &&
+          !isValidLNCH(formData.egn) && (
+            <p className="text-amber-700 text-sm mt-1">{t('modal.egnForeignWarning')}</p>
+          )
         )}
       </div>
 

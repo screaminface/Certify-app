@@ -115,6 +115,8 @@ export default {
   'modal.medicalDateRequired': 'Медицинският преглед е задължителен',
   'modal.egnRequired': 'ЕГН е задължително',
   'modal.egnInvalid': 'ЕГН трябва да е 10 цифри',
+  'modal.egnChecksumInvalid': 'Невалидно ЕГН (грешна контролна цифра или дата) — проверете за печатна грешка',
+  'modal.egnForeignWarning': 'Номерът не е валидно ЕГН или ЛНЧ — проверете го. Записът е разрешен, защото гражданството не е българско.',
   'modal.birthPlaceRequired': 'Месторождение е задължително',
   'modal.medicalValid': 'Валиден',
   'modal.courseDates': 'Курсови дати',
@@ -462,6 +464,7 @@ export default {
   'security.resetDataTitle': 'Нулиране на данни и ПИН?',
   'security.resetDataMessage': 'Ако сте забравили своя ПИН, единственият начин да получите достъп до приложението е да НУЛИРАТЕ всички локални данни. Това ще изтрие всички участници и групи. След това можете да ги възстановите от резервно копие (backup).',
   'security.resetDataConfirm': 'Да, нулирай всичко',
+  'security.resetTypeToConfirm': 'За потвърждение изпишете',
   'security.pinMismatch': 'ПИН кодовете не съвпадат. Опитайте отново.',
   'security.error': 'Възникна грешка. Моля, опитайте отново.',
   

@@ -115,6 +115,8 @@ export default {
   'modal.medicalDateRequired': 'Medical date is required',
   'modal.egnRequired': 'EGN is required',
   'modal.egnInvalid': 'EGN must be 10 digits',
+  'modal.egnChecksumInvalid': 'Invalid EGN (wrong check digit or date) — check for a typo',
+  'modal.egnForeignWarning': 'This is neither a valid EGN nor a valid LNCH — please check it. Saving is allowed because the citizenship is not Bulgarian.',
   'modal.birthPlaceRequired': 'Place of birth is required',
   'modal.medicalValid': 'Valid',
   'modal.courseDates': 'Course Dates',
@@ -461,6 +463,7 @@ export default {
   'security.resetDataTitle': 'Reset Data & PIN?',
   'security.resetDataMessage': 'If you forgot your PIN, the only way to access the app is to RESET all local data. This will delete all participants and groups. You can then restore from a backup file.',
   'security.resetDataConfirm': 'Yes, Reset Everything',
+  'security.resetTypeToConfirm': 'Type to confirm',
   'security.pinMismatch': 'PINs do not match. Try again.',
   'security.error': 'An error occurred. Please try again.',
   

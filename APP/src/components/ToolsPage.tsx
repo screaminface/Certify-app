@@ -1772,7 +1772,9 @@ const YearlyArchiveViewer: React.FC<{
                 {expandedYear === archive.year && (
                   <div className="border-t border-slate-200 p-4 space-y-2">
                     {archive.groups.sort((a: any, b: any) => b.groupNumber - a.groupNumber).map((group: any) => {
-                      const groupParticipants = archive.participants.filter((p: any) => p.groupNumber === group.groupNumber);
+                      // Participants link to their group by course start date (the
+                      // participant.groupNumber field was removed in DB v7)
+                      const groupParticipants = archive.participants.filter((p: any) => p.courseStartDate === group.courseStartDate);
                       
                       return (
                         <div key={group.id} className="border border-slate-200 rounded-lg">

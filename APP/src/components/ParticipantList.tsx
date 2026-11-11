@@ -824,13 +824,10 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     return isGroupReadOnly(group);
   };
 
-  if (sortedParticipants.length === 0) {
-    return (
-      <div className="text-center py-12 text-slate-500">
-        {t('participants.noResults')}
-      </div>
-    );
-  }
+  // No early return on empty: with a fresh database the sections below still
+  // render the auto-created planned periods (so the dashboard matches the
+  // "Групи (общо)" counters), and the filtered-no-results state further down
+  // handles the empty filter case.
 
   return (
     <>

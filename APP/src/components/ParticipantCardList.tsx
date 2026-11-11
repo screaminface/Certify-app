@@ -833,13 +833,8 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
     );
   };
 
-  if (participants.length === 0) {
-    return (
-      <div className="text-center py-12 text-slate-500">
-        {t("participants.noResults")}
-      </div>
-    );
-  }
+  // No early return on empty: sections below render the auto-created planned
+  // periods on a fresh database, and the filtered empty state handles filters.
 
   return (
     <>

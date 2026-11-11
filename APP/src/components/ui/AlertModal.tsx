@@ -28,15 +28,16 @@ export const AlertModal: React.FC<AlertModalProps> = ({
     }
   }, [isOpen, onClose]);
 
-  // Auto-close after 5 seconds
+  // Auto-close after 5 seconds — but never for errors: an error the user
+  // didn't get to read is an error that didn't happen.
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && variant !== 'error' && variant !== 'danger') {
       const timer = setTimeout(() => {
         onClose();
       }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, variant]);
 
   if (!isOpen) return null;
 

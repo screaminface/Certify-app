@@ -196,3 +196,60 @@ export function validateLoginCredentials(
     passwordError: passwordValidation.error
   };
 }
+
+/**
+ * Validates a Bulgarian EGN (unified civil number).
+ * Checks: 10 digits, valid embedded birth date (incl. +40/+20 month offsets
+ * for 2000+/1800s births), and the mod-11 weighted checksum digit.
+ */
+export function isValidEGN(egn: string): boolean {
+  if (!/^\d{10}$/.test(egn)) return false;
+
+  // Embedded birth date: YY MM DD, month offset encodes the century
+  let year = parseInt(egn.slice(0, 2), 10);
+  let month = parseInt(egn.slice(2, 4), 10);
+  const day = parseInt(egn.slice(4, 6), 10);
+
+  if (month >= 41) {
+    month -= 40;
+    year += 2000;
+  } else if (month >= 21) {
+    month -= 20;
+    year += 1800;
+  } else {
+    year += 1900;
+  }
+
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return false;
+  }
+
+  // Mod-11 weighted checksum
+  const weights = [2, 4, 8, 5, 10, 9, 7, 3, 6];
+  const sum = weights.reduce((acc, w, i) => acc + w * parseInt(egn[i], 10), 0);
+  const check = sum % 11 === 10 ? 0 : sum % 11;
+
+  return check === parseInt(egn[9], 10);
+}
+
+/**
+ * Validates a ЛНЧ (personal number of a foreigner): 10 digits, mod-10
+ * weighted checksum. Foreign participants usually have this instead of an EGN.
+ */
+export function isValidLNCH(lnch: string): boolean {
+  if (!/^\d{10}$/.test(lnch)) return false;
+  const weights = [21, 19, 17, 13, 11, 9, 7, 3, 1];
+  const sum = weights.reduce((acc, w, i) => acc + w * parseInt(lnch[i], 10), 0);
+  return sum % 10 === parseInt(lnch[9], 10);
+}
+
+/** Empty counts as Bulgarian — the form defaults to "българско". */
+export function isBulgarianCitizenship(citizenship: string): boolean {
+  const c = (citizenship || '').trim().toLowerCase();
+  return c === '' || c.startsWith('българ') || c === 'bg' || c === 'bulgarian';
+}
