@@ -45,6 +45,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      disable: isDesktop,
       registerType: 'autoUpdate',
       injectRegister: 'auto',
       devOptions: {

@@ -164,22 +164,26 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
       
       // Update suggested unique number for active groups
       if (suggestedGroup.status === 'active') {
-        Promise.all([
-          generateNextUniqueNumber(),
-          checkForGaps()
-        ]).then(([num, gap]) => {
-          // Show gap number if exists, otherwise next number
-          const suggestedNumber = gap || num;
-          setNextUniqueNumber(suggestedNumber);
-          setGapNumber(gap);
-          
-          // CRITICAL: If editing participant and moving to active, clear old number to use suggested
-          if (participant) {
-            setFormData(prev => ({ ...prev, uniqueNumber: '' }));
-          }
-        }).catch(err => {
-          console.error('Failed to get unique number:', err);
-        });
+        // If participant is already in this exact group — don't recompute numbers at all
+        if (participant && participant.courseStartDate === suggestedGroup.courseStartDate) {
+          setNextUniqueNumber('');
+          setGapNumber(null);
+        } else {
+          Promise.all([
+            generateNextUniqueNumber(),
+            checkForGaps()
+          ]).then(([num, gap]) => {
+            const suggestedNumber = gap || num;
+            setNextUniqueNumber(suggestedNumber);
+            setGapNumber(gap);
+            // Moving to a different group — clear old number so new one gets assigned
+            if (participant) {
+              setFormData(prev => ({ ...prev, uniqueNumber: '' }));
+            }
+          }).catch(err => {
+            console.error('Failed to get unique number:', err);
+          });
+        }
       } else {
         // Planned group - no unique number
         setNextUniqueNumber('');
@@ -729,16 +733,19 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
             : null;
           const isManualPlanned = manualGroup?.status === 'planned';
           const effectiveStatus = manualGroup ? manualGroup.status : suggestedGroup?.status;
+          // Participant is staying in the same group → suppress all number messages
+          const selectedGroupStartDate = manualGroup?.courseStartDate ?? suggestedGroup?.courseStartDate;
+          const isStayingInSameGroup = !!(participant && selectedGroupStartDate && participant.courseStartDate === selectedGroupStartDate);
           return (
             <>
-              {gapNumber && participant && !isManualPlanned && (
+              {gapNumber && participant && !isManualPlanned && !isStayingInSameGroup && (
                 <div className="mb-2 p-2 bg-amber-50 border border-amber-300 rounded-xl">
                   <p className="text-amber-800 text-sm font-medium">
                     ⚠️ Участникът ще получи попълващ номер: {gapNumber}
                   </p>
                 </div>
               )}
-              {participant && effectiveStatus === 'active' && nextUniqueNumber && !gapNumber && (
+              {participant && effectiveStatus === 'active' && nextUniqueNumber && !gapNumber && !isStayingInSameGroup && (
                 <div className="mb-2 p-2 bg-blue-50 border border-blue-300 rounded-xl">
                   <p className="text-blue-800 text-sm font-medium">
                     ℹ️ Преместване в активна група → Уникален номер: <span className="font-bold">{nextUniqueNumber}</span>
