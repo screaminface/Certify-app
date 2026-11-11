@@ -1,7 +1,7 @@
 {
   "name": "course-management-pwa",
   "private": true,
-  "version": "2.5.6",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,8 +14,8 @@
     "tauri:build": "tauri build && powershell -Command \"$v = (Get-Content package.json | ConvertFrom-Json).version; Get-ChildItem releases/ -File | Where-Object { $_.Name -match '^CERTIFY' } | Remove-Item -Force; Copy-Item \\\"src-tauri/target/release/bundle/nsis/CERTIFY_${v}_x64-setup.exe\\\" -Destination releases/ -Force; Copy-Item \\\"src-tauri/target/release/bundle/msi/CERTIFY_${v}_x64_bg-BG.msi\\\" -Destination releases/ -Force\"",
     "android:sync": "npm run build:android && npx cap sync android",
     "android:open": "npx cap open android",
-    "android:build:release": "npm run android:sync && cd android && gradlew assembleRelease",
-    "android:build:debug": "npm run android:sync && cd android && gradlew assembleDebug && cd .. && powershell -Command \"$version = (Get-Content package.json | ConvertFrom-Json).version; Copy-Item android/app/build/outputs/apk/debug/app-debug.apk -Destination releases/CERTIFY-v$version-android-debug.apk\"",
+    "android:build:release": "npm run android:sync && cd android && .\\gradlew assembleRelease",
+    "android:build:debug": "npm run android:sync && cd android && .\\gradlew assembleDebug",
     "android:build": "npm run android:build:debug"
   },
   "dependencies": {
