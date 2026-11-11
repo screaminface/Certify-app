@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { User, Calendar, MapPin, Hash, Clock, X } from 'lucide-react';
+import { ModalShell } from './ModalShell';
 import { Participant } from '../../db/database';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { formatDateBG } from '../../utils/medicalValidation';
@@ -17,21 +18,12 @@ export const DetailModal: React.FC<DetailModalProps> = ({
 }) => {
   const { t } = useLanguage();
 
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      return () => document.removeEventListener('keydown', handleEscape);
-    }
-  }, [isOpen, onClose]);
-
+  // Escape/focus handling lives in ModalShell.
   if (!isOpen || !participant) return null;
 
   return (
-    <>
-      <div 
+    <ModalShell onClose={onClose}>
+      <div
         className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 transition-opacity"
         onClick={onClose}
       />
@@ -127,6 +119,6 @@ export const DetailModal: React.FC<DetailModalProps> = ({
           </div>
         </div>
       </div>
-    </>
+    </ModalShell>
   );
 };

@@ -1,5 +1,5 @@
 import { FormEvent, useState, useMemo, useEffect } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Search } from 'lucide-react';
 import { useParticipants } from './hooks/useParticipants';
 import { useGroups } from './hooks/useGroups';
 import { useGroupSections } from './hooks/useGroupSections';
@@ -751,7 +751,7 @@ function AppContent() {
               onClick={() => setIsFiltersOpen(true)}
               className="w-full px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow font-medium min-h-[48px]"
             >
-              🔍 {t('filters.title')}
+              <Search className="w-5 h-5 inline-block align-text-bottom mr-2" strokeWidth={2} aria-hidden="true" />{t('filters.title')}
             </button>
           </div>
 

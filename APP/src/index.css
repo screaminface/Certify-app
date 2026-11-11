@@ -41,6 +41,13 @@ body {
   min-height: 100vh;
 }
 
+/* One brand colour for every native checkbox/radio instead of each
+   browser's factory blue (Chrome, WebView2 and Android WebView differ). */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #2563eb;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Info, Calendar, Package, Users, Activity, CheckCircle2, AlertTriangle, XCircle, HelpCircle, CalendarClock, BadgeCheck, Mail } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { formatDisplayDate, toISODate } from '../utils/dateUtils';
+import { ModalShell } from './ui/ModalShell';
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -83,6 +84,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, entitle
       : 'text-slate-900';
 
   return (
+    <ModalShell onClose={onClose}>
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg p-6 max-w-md w-full">
         <div className="flex justify-between items-center mb-4">
@@ -208,5 +210,6 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, entitle
         </div>
       </div>
     </div>
+    </ModalShell>
   );
 };

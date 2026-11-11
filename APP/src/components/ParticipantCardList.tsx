@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Lock, SearchX } from 'lucide-react';
 import { Participant, db, Group } from "../db/database";
 import { useParticipants } from "../hooks/useParticipants";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -592,7 +593,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                   className="text-xs text-slate-500 shrink-0"
                   title={t("lock.lockedInfo")}
                 >
-                  🔒
+                  <Lock className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
                 </span>
               )}
             </div>
@@ -897,7 +898,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
           variant="active"
         >
           {activeGroupedByDate.length === 0 ? (
-             <div className="text-center py-8 text-slate-500 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+             <div className="text-center py-8 text-slate-600 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
                <p>{t("participants.noActive")}</p>
              </div>
           ) : (
@@ -926,7 +927,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
                       )}
                     </div>
                   ) : (
-                    <div className="text-center py-4 italic text-slate-400 bg-white/50 rounded border border-dashed border-slate-100">
+                    <div className="text-center py-4 italic text-slate-600 bg-white/50 rounded border border-dashed border-slate-100">
                       {t("participants.noParticipantsInGroup")}
                     </div>
                   )}
@@ -984,7 +985,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
               )}
             </div>
           ) : (
-            <div className="text-center py-8 text-slate-500">
+            <div className="text-center py-8 text-slate-600">
               {t('participants.noParticipantsInGroup')}
             </div>
           )}
@@ -1026,7 +1027,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
               )}
             </div>
           ) : (
-            <div className="text-center py-8 text-slate-500">
+            <div className="text-center py-8 text-slate-600">
               Няма приключени групи
             </div>
           )}
@@ -1037,7 +1038,7 @@ export const ParticipantCardList: React.FC<ParticipantCardListProps> = ({
       {/* Empty State - No Results */}
       {hasActiveFilters && participants.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <div className="text-6xl mb-4">🔍</div>
+          <SearchX className="w-12 h-12 text-slate-400 mb-4" strokeWidth={1.5} aria-hidden="true" />
           <h3 className="text-lg font-semibold text-slate-700 mb-2">
             Няма намерени резултати
           </h3>

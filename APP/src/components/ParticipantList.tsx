@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Lock, SearchX } from 'lucide-react';
 import { Participant, db, Group } from '../db/database';
 import { useParticipants } from '../hooks/useParticipants';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -483,8 +484,8 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             checked={selectedIds.has(participant.id)}
             onChange={() => handleSelectOne(participant.id)}
             disabled={isReadOnly}
-            className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label={`Select ${participant.personName}`}
+            className="w-4 h-4 text-blue-600 rounded focus-visible:ring-2 focus-visible:ring-blue-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label={t('aria.selectParticipant', { name: participant.personName })}
           />
         </td>
         <td className="px-3 py-3 text-sm text-slate-900">
@@ -492,7 +493,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             <CompanyBadge companyName={participant.companyName} />
             {isReadOnly && (
               <span className="text-xs text-slate-500" title={t('lock.lockedInfo')}>
-                🔒
+                <Lock className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
               </span>
             )}
           </div>
@@ -524,7 +525,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             onChange={() => handleCheckboxChange(participant, 'sent')}
             disabled={isReadOnly}
             title="Данните са изпратени към фирмата"
-            className="w-5 h-5 text-emerald-600 rounded focus:ring-2 focus:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+            className="w-5 h-5 text-emerald-600 rounded focus-visible:ring-2 focus-visible:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
           />
         </td>
         <td className="px-3 py-3 text-center">
@@ -534,7 +535,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             onChange={() => handleCheckboxChange(participant, 'documents')}
             disabled={isReadOnly}
             title="Получени са всички документи"
-            className="w-5 h-5 text-emerald-600 rounded focus:ring-2 focus:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+            className="w-5 h-5 text-emerald-600 rounded focus-visible:ring-2 focus-visible:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
           />
         </td>
         <td className="px-3 py-3 text-center">
@@ -544,7 +545,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             onChange={() => handleCheckboxChange(participant, 'handedOver')}
             disabled={isReadOnly}
             title="Удостоверението е предадено"
-            className="w-5 h-5 text-emerald-600 rounded focus:ring-2 focus:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+            className="w-5 h-5 text-emerald-600 rounded focus-visible:ring-2 focus-visible:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
           />
         </td>
         <td className="px-3 py-3 text-center">
@@ -554,7 +555,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             onChange={() => handleCheckboxChange(participant, 'paid')}
             disabled={isReadOnly}
             title="Таксата е платена"
-            className="w-5 h-5 text-emerald-600 rounded focus:ring-2 focus:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+            className="w-5 h-5 text-emerald-600 rounded focus-visible:ring-2 focus-visible:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
           />
         </td>
         <td className="px-3 py-3 text-center">
@@ -592,7 +593,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
               disabled={isReadOnly}
               className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               title={isReadOnly ? t('lock.lockedInfo') : t('common.edit')}
-              aria-label={`Edit ${participant.personName}`}
+              aria-label={t('aria.editParticipant', { name: participant.personName })}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -602,7 +603,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
               onClick={() => handleGenerateCertificate(participant)}
               className="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors duration-150"
               title="Генерирай сертификат"
-              aria-label={`Generate certificate for ${participant.personName}`}
+              aria-label={t('aria.certificateFor', { name: participant.personName })}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -613,7 +614,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
               disabled={isReadOnly}
               className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               title={isReadOnly ? t('lock.lockedInfo') : t('common.delete')}
-              aria-label={`Delete ${participant.personName}`}
+              aria-label={t('aria.deleteParticipant', { name: participant.personName })}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -638,8 +639,8 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             checked={selectedIds.has(participant.id)}
             onChange={() => handleSelectOne(participant.id)}
             disabled={isReadOnly}
-            className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label={`Select ${participant.personName}`}
+            className="w-4 h-4 text-blue-600 rounded focus-visible:ring-2 focus-visible:ring-blue-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label={t('aria.selectParticipant', { name: participant.personName })}
           />
         </td>
         <td className="px-3 py-3 text-sm text-slate-900">
@@ -666,7 +667,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             onChange={() => handleCheckboxChange(participant, 'documents')}
             disabled={isReadOnly}
             title="Получени са всички документи"
-            className="w-5 h-5 text-emerald-600 rounded focus:ring-2 focus:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+            className="w-5 h-5 text-emerald-600 rounded focus-visible:ring-2 focus-visible:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
           />
         </td>
         <td className="px-3 py-3 text-center">
@@ -676,7 +677,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             onChange={() => handleCheckboxChange(participant, 'paid')}
             disabled={isReadOnly}
             title="Таксата е платена"
-            className="w-5 h-5 text-emerald-600 rounded focus:ring-2 focus:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+            className="w-5 h-5 text-emerald-600 rounded focus-visible:ring-2 focus-visible:ring-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
           />
         </td>
         <td className="px-3 py-3">
@@ -686,7 +687,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
               disabled={isReadOnly}
               className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               title={isReadOnly ? t('lock.lockedInfo') : t('common.edit')}
-              aria-label={`Edit ${participant.personName}`}
+              aria-label={t('aria.editParticipant', { name: participant.personName })}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -697,7 +698,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
               disabled={isReadOnly}
               className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               title={isReadOnly ? t('lock.lockedInfo') : t('common.delete')}
-              aria-label={`Delete ${participant.personName}`}
+              aria-label={t('aria.deleteParticipant', { name: participant.personName })}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -862,7 +863,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
             variant="active"
           >
           {activeGroupedByDate.length === 0 ? (
-             <div className="text-center py-8 text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+             <div className="text-center py-8 text-slate-600 bg-slate-50 border border-dashed border-slate-200 rounded-lg">
                {t('participants.noActive')}
              </div>
           ) : (
@@ -900,7 +901,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                                 }
                                 setSelectedIds(newSelected);
                               }}
-                              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-300 cursor-pointer"
+                              className="w-4 h-4 text-blue-600 rounded focus-visible:ring-2 focus-visible:ring-blue-300 cursor-pointer"
                             />
                           </th>
                           <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
@@ -940,7 +941,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                             {t('filters.status')}
                           </th>
                           <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                            {t('common.delete')}
+                            {t('table.actions')}
                           </th>
                         </tr>
                       </thead>
@@ -949,7 +950,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                            data.participants.map(renderParticipantRow)
                         ) : (
                            <tr>
-                              <td colSpan={13} className="text-center py-8 text-slate-400 italic">
+                              <td colSpan={13} className="text-center py-8 text-slate-600 italic">
                                  {t("participants.noParticipantsInGroup")}
                               </td>
                            </tr>
@@ -1014,7 +1015,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                                 }
                                 setSelectedIds(newSelected);
                               }}
-                              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-300 cursor-pointer"
+                              className="w-4 h-4 text-blue-600 rounded focus-visible:ring-2 focus-visible:ring-blue-300 cursor-pointer"
                             />
                           </th>
                           <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
@@ -1040,7 +1041,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                             {t('participant.paid')}
                           </th>
                           <th className="px-3 py-2 text-center text-xs font-semibold text-slate-700 uppercase tracking-wider border-b border-slate-200">
-                            {t('common.delete')}
+                            {t('table.actions')}
                           </th>
                         </tr>
                       </thead>
@@ -1049,7 +1050,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                            participants.map(renderPlannedParticipantRow)
                         ) : (
                            <tr>
-                              <td colSpan={10} className="text-center py-4 text-slate-400 italic">
+                              <td colSpan={10} className="text-center py-4 text-slate-600 italic">
                                  {t("participants.noParticipantsInGroup")}
                               </td>
                            </tr>
@@ -1101,7 +1102,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       {/* Empty State - No Results */}
       {hasActiveFilters && participants.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <div className="text-6xl mb-4">🔍</div>
+          <SearchX className="w-12 h-12 text-slate-400 mb-4" strokeWidth={1.5} aria-hidden="true" />
           <h3 className="text-lg font-semibold text-slate-700 mb-2">
             Няма намерени резултати
           </h3>

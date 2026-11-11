@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { Lock, Eye, EyeOff } from 'lucide-react';
+import { Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { ModalShell } from './ModalShell';
 
 interface PasswordModalProps {
   isOpen: boolean;
@@ -26,6 +27,8 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
   if (!isOpen) return null;
 
   return (
+    // Esc must not abort an encryption/decryption already in flight
+    <ModalShell onClose={isProcessing ? undefined : onCancel}>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="p-6">
@@ -73,7 +76,7 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
 
             {error && (
               <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2 animate-pulse">
-                <span>⚠️</span> {error}
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" strokeWidth={2} aria-hidden="true" /> {error}
               </div>
             )}
 
@@ -101,5 +104,6 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalShell>
   );
 };

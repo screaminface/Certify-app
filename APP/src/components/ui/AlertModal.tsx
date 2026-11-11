@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { AlertTriangle, Info, CheckCircle, XCircle } from 'lucide-react';
+import { ModalShell } from './ModalShell';
 
 interface AlertModalProps {
   isOpen: boolean;
@@ -18,15 +19,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({
   buttonText = 'OK',
   variant = 'info'
 }) => {
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      return () => document.removeEventListener('keydown', handleEscape);
-    }
-  }, [isOpen, onClose]);
+  // Escape/focus handling lives in ModalShell.
 
   // Auto-close after 5 seconds — but never for errors: an error the user
   // didn't get to read is an error that didn't happen.
@@ -72,13 +65,14 @@ export const AlertModal: React.FC<AlertModalProps> = ({
   };
 
   return (
-    <>
-      <div 
-        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 transition-opacity"
+    <ModalShell onClose={onClose}>
+      {/* z-[70]: alerts may stack on top of ParticipantModal (z-55/60) */}
+      <div
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] transition-opacity"
         onClick={onClose}
       />
-      
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full md:max-w-md lg:max-w-lg overflow-hidden animate-scale-up transform transition-all">
           
           <div className="p-6 md:p-8 text-center">
@@ -104,6 +98,6 @@ export const AlertModal: React.FC<AlertModalProps> = ({
           </div>
         </div>
       </div>
-    </>
+    </ModalShell>
   );
 };

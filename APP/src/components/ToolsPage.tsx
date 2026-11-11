@@ -23,8 +23,9 @@ import {
 } from '../utils/groupUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ConfirmModal } from './ui/ConfirmModal';
+import { ModalShell } from './ui/ModalShell';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Settings as SettingsIcon, Calendar, Users, CheckCircle, ChevronDown, Clock, RotateCcw, X, ChevronRight, Upload, Package, FileSpreadsheet, FileText, Download, AlertTriangle, Archive, AlertCircle, Info, Activity, CalendarClock, Lock, Hash } from 'lucide-react';
+import { Settings as SettingsIcon, Calendar, Users, CheckCircle, ChevronDown, Clock, RotateCcw, X, ChevronRight, Upload, Package, FileSpreadsheet, FileText, Download, AlertTriangle, Archive, AlertCircle, Info, Activity, CalendarClock, Lock, Hash, FolderOpen } from 'lucide-react';
 import ReactCountryFlag from 'react-country-flag';
 import { LockScreen } from './security/LockScreen';
 import { triggerManualLock } from './security/AppLockGate';
@@ -923,7 +924,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
                 type="checkbox"
                 checked={closeGroupAcknowledged}
                 onChange={(e) => setCloseGroupAcknowledged(e.target.checked)}
-                className="mt-1 w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                className="mt-1 w-5 h-5 text-blue-600 rounded border-slate-300 focus-visible:ring-blue-500"
               />
               <span className="text-sm text-slate-700 flex-1">
                 {t('tools.closeGroupDescription')}
@@ -991,6 +992,10 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
 
       {/* Create Group Modal */}
       {showCreateGroupModal && (
+        <ModalShell onClose={() => {
+          setShowCreateGroupModal(false);
+          setCreateGroupData({ date: '', status: 'planned' });
+        }}>
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between">
@@ -1077,6 +1082,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
             </div>
           </div>
         </div>
+        </ModalShell>
       )}
 
       {/* Create Group Button Section */}
@@ -1614,7 +1620,7 @@ const YearlyArchiveSection: React.FC<{
           onClick={onViewArchives}
           className="w-full px-6 py-4 bg-slate-600 text-white rounded-lg hover:bg-slate-700 font-medium min-h-[48px] transition-colors"
         >
-          📚 {t('archive.viewArchives')}
+          <FolderOpen className="w-5 h-5 inline-block align-text-bottom mr-2" strokeWidth={2} aria-hidden="true" />{t('archive.viewArchives')}
         </button>
       </div>
     </div>
@@ -1654,6 +1660,7 @@ const YearlyArchiveModal: React.FC<{
   if (!isOpen) return null;
 
   return (
+    <ModalShell onClose={onClose}>
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg p-6 max-w-md w-full">
         <h3 className="text-xl font-bold text-purple-600 mb-4">{t('archive.confirmTitle')}</h3>
@@ -1711,6 +1718,7 @@ const YearlyArchiveModal: React.FC<{
         </div>
       </div>
     </div>
+    </ModalShell>
   );
 };
 
@@ -1728,6 +1736,7 @@ const YearlyArchiveViewer: React.FC<{
   if (!isOpen) return null;
 
   return (
+    <ModalShell onClose={onClose}>
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
@@ -1850,6 +1859,7 @@ const YearlyArchiveViewer: React.FC<{
         </div>
       </div>
     </div>
+    </ModalShell>
   );
 };
 
@@ -1917,7 +1927,7 @@ const DangerZoneReset: React.FC<DangerZoneResetProps> = ({ showAlert }) => {
             type="checkbox"
             checked={acknowledged}
             onChange={(e) => setAcknowledged(e.target.checked)}
-            className="mt-1 w-5 h-5 text-red-600 rounded border-slate-300 focus:ring-red-500"
+            className="mt-1 w-5 h-5 text-red-600 rounded border-slate-300 focus-visible:ring-red-500"
           />
           <span className="text-sm text-slate-700 flex-1">
             {t('tools.resetSequenceCheckbox')}
@@ -1951,6 +1961,7 @@ const DangerZoneReset: React.FC<DangerZoneResetProps> = ({ showAlert }) => {
 
       {/* Final confirmation modal */}
       {showFinalConfirm && (
+        <ModalShell onClose={() => setShowFinalConfirm(false)}>
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h3 className="text-xl font-bold text-red-600 mb-4">{t('modal.finalConfirmation')}</h3>
@@ -1973,6 +1984,7 @@ const DangerZoneReset: React.FC<DangerZoneResetProps> = ({ showAlert }) => {
             </div>
           </div>
         </div>
+        </ModalShell>
       )}
     </div>
   );

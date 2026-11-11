@@ -7,6 +7,8 @@ import { isMedicalValidForCourse, formatDateBG } from '../utils/medicalValidatio
 import { getActiveGroup, getSuggestedGroup } from '../utils/groupUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ConfirmModal } from './ui/ConfirmModal';
+import { ModalShell } from './ui/ModalShell';
+import { Ban, AlertTriangle, Info } from 'lucide-react';
 import { isValidEGN, isValidLNCH, isBulgarianCitizenship } from '../utils/inputValidation';
 import { CompanySelect } from './ui/CompanySelect';
 import { COMPANIES } from '../constants/companies';
@@ -678,7 +680,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
             {suggestedGroup.status === 'completed' ? (
               <div className="bg-red-50 border border-red-200 p-3 rounded-xl">
                 <p className="text-sm text-red-800 font-medium">
-                  ⛔ {t('modal.periodClosed')}
+                  <Ban className="w-4 h-4 inline-block align-text-bottom mr-1" strokeWidth={2} aria-hidden="true" />{t('modal.periodClosed')}
                   <br />
                   <span className="text-xs font-normal mt-1 block">
                     {t('modal.cannotAddComp', { date: formatDateBG(suggestedGroup.courseStartDate) })}
@@ -752,14 +754,14 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
               {gapNumber && participant && !isManualPlanned && !isStayingInSameGroup && (
                 <div className="mb-2 p-2 bg-amber-50 border border-amber-300 rounded-xl">
                   <p className="text-amber-800 text-sm font-medium">
-                    ⚠️ Участникът ще получи попълващ номер: {gapNumber}
+                    <AlertTriangle className="w-4 h-4 inline-block align-text-bottom mr-1" strokeWidth={2} aria-hidden="true" />Участникът ще получи попълващ номер: {gapNumber}
                   </p>
                 </div>
               )}
               {participant && effectiveStatus === 'active' && nextUniqueNumber && !gapNumber && !isStayingInSameGroup && (
                 <div className="mb-2 p-2 bg-blue-50 border border-blue-300 rounded-xl">
                   <p className="text-blue-800 text-sm font-medium">
-                    ℹ️ Преместване в активна група → Уникален номер: <span className="font-bold">{nextUniqueNumber}</span>
+                    <Info className="w-4 h-4 inline-block align-text-bottom mr-1" strokeWidth={2} aria-hidden="true" />Преместване в активна група → Уникален номер: <span className="font-bold">{nextUniqueNumber}</span>
                   </p>
                 </div>
               )}
@@ -821,7 +823,8 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
   );
 
   return (
-    <>
+    // Esc must not interrupt a save in flight
+    <ModalShell onClose={isSubmitting ? undefined : onClose}>
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-[55] transition-opacity duration-300"
@@ -921,6 +924,6 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         cancelText="Отказ"
         variant="warning"
       />
-    </>
+    </ModalShell>
   );
 };

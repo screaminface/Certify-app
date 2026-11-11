@@ -1,8 +1,9 @@
 apply plugin: 'com.android.application'
 
-// Read version from package.json automatically
-def packageJson = new groovy.json.JsonSlurper().parse(file("../../package.json"))
-def appVersionName = packageJson.version
+// Read version from package.json automatically (regex — package.json has a
+// single top-level "version" key; avoids groovy.json classpath lint noise)
+def versionMatcher = file("../../package.json").text =~ /"version":\s*"([^"]+)"/
+def appVersionName = versionMatcher[0][1]
 def appVersionParts = appVersionName.tokenize('.')
 def appVersionCode = appVersionParts[0].toInteger() * 10000 + appVersionParts[1].toInteger() * 100 + appVersionParts[2].toInteger()
 

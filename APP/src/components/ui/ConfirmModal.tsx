@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { AlertTriangle, Info, CheckCircle } from 'lucide-react';
+import { ModalShell } from './ModalShell';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -22,16 +23,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   cancelText = 'Cancel',
   variant = 'info'
 }) => {
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      return () => document.removeEventListener('keydown', handleEscape);
-    }
-  }, [isOpen, onClose]);
-
+  // Escape/focus handling lives in ModalShell.
   if (!isOpen) return null;
 
   const getIcon = () => {
@@ -62,13 +54,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   };
 
   return (
-    <>
-      <div 
-        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 transition-opacity"
+    <ModalShell onClose={onClose}>
+      {/* z-[70]: confirms may stack on top of ParticipantModal (z-55/60) */}
+      <div
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] transition-opacity"
         onClick={onClose}
       />
-      
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-scale-up transform transition-all">
           
           <div className="p-6">
@@ -106,6 +99,6 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </div>
         </div>
       </div>
-    </>
+    </ModalShell>
   );
 };

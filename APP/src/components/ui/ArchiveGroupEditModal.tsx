@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Participant } from '../../db/database';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { ModalShell } from './ModalShell';
 
 interface ArchiveGroupEditModalProps {
   isOpen: boolean;
@@ -34,17 +35,7 @@ export const ArchiveGroupEditModal: React.FC<ArchiveGroupEditModalProps> = ({
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.removeEventListener('keydown', handleEscape);
-        document.body.style.overflow = '';
-      };
-    }
-  }, [isOpen, onClose]);
+  // Escape, focus trap and body scroll lock live in ModalShell.
 
   const handleToggle = useCallback(
     async (participant: Participant, field: Field) => {
@@ -86,7 +77,7 @@ export const ArchiveGroupEditModal: React.FC<ArchiveGroupEditModalProps> = ({
   const fieldStyleOff: React.CSSProperties = { background: '#F3F4F6', color: '#6B7280', border: '1px solid #E5E7EB' };
 
   return (
-    <>
+    <ModalShell onClose={onClose}>
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-50 transition-opacity duration-300"
@@ -151,7 +142,7 @@ export const ArchiveGroupEditModal: React.FC<ArchiveGroupEditModalProps> = ({
 
         <ModalFooter onClose={onClose} t={t} />
       </div>
-    </>
+    </ModalShell>
   );
 };
 
@@ -207,7 +198,7 @@ function ModalBody({
   view: 'table' | 'cards';
 }) {
   if (participants.length === 0) {
-    return <p className="text-center text-slate-400 py-12 text-sm flex-1">{t('archiveEdit.noParticipants')}</p>;
+    return <p className="text-center text-slate-600 py-12 text-sm flex-1">{t('archiveEdit.noParticipants')}</p>;
   }
 
   const FIELDS: Field[] = ['sent', 'documents', 'handedOver', 'paid'];

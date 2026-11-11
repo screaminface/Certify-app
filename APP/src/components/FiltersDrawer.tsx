@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { ModalShell } from './ui/ModalShell';
 
 interface FiltersDrawerProps {
   isOpen: boolean;
@@ -79,16 +80,7 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
     if (e.key === 'Enter') onClose();
   };
 
-  // Close on escape key
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      return () => document.removeEventListener('keydown', handleEscape);
-    }
-  }, [isOpen, onClose]);
+  // Escape/focus handling lives in ModalShell.
 
   const StatusFilterButton: React.FC<{
     label: string;
@@ -129,7 +121,7 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
   if (!isOpen) return null;
 
   return (
-    <>
+    <ModalShell onClose={onClose}>
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/30 z-40 transition-opacity"
@@ -288,6 +280,6 @@ export const FiltersDrawer: React.FC<FiltersDrawerProps> = ({
           </div>
         </div>
       </div>
-    </>
+    </ModalShell>
   );
 };
