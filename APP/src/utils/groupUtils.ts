@@ -385,7 +385,12 @@ export async function syncGroups(): Promise<void> {
 
   // 1.2 Sanitize Group Dates (Fix local timezone bugs resulting in Sunday dates)
   // If any group starts on a non-Monday, shift it to Monday
+  let movedAnyGroup = false;
   for (const g of allGroups) {
+      // Completed groups are history: their dates are on issued certificates
+      // and protocols, so they are never moved automatically (e.g. group №8
+      // of 2026 stored as Sunday 29.03 by the old DST bug stays as issued).
+      if (g.status === 'completed') continue;
       const d = parseISODate(g.courseStartDate);
       if (d.getDay() !== 1) {
           console.warn(`Found invalid group start date ${g.courseStartDate} (Day: ${d.getDay()}). Fixing to Monday.`);
@@ -425,9 +430,16 @@ export async function syncGroups(): Promise<void> {
                   courseEndDate: correctEndDateStr
               });
           }
+          movedAnyGroup = true;
       }
   }
-  
+
+  // Every step below works on the snapshots taken at the top. After moving
+  // groups/participants they are stale — a moved planned group looked empty
+  // (counts keyed by the old date) and was pruned. Start over with fresh
+  // data; the second pass finds nothing left to move, so this recurses once.
+  if (movedAnyGroup) return syncGroups();
+
   // 2. Identify all required periods
   const requiredPeriods = new Set<string>();
   

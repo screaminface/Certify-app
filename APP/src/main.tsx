@@ -22,28 +22,32 @@ if (storedVersion !== APP_VERSION) {
     });
   }
   
-  // Clear all cached data except critical settings
-  const keysToPreserve = ['spi.db.initialized', 'spi.language'];
-  const preservedData: Record<string, string> = {};
-  
-  keysToPreserve.forEach(key => {
-    const value = localStorage.getItem(key);
-    if (value !== null) {
-      preservedData[key] = value;
-    }
-  });
-  
-  localStorage.clear();
-  
-  // Restore preserved data
-  Object.entries(preservedData).forEach(([key, value]) => {
-    localStorage.setItem(key, value);
-  });
-  
+  // Clear stale leftovers, but keep everything the user would notice losing.
+  // (Before 3.0.0 only language survived: every update silently turned the
+  // PIN lock off and logged the user out — re-login needs internet.)
+  const PRESERVE_KEYS = new Set([
+    'spi.db.initialized',
+    'spi.language',
+    'app_pin_config',             // PIN lock (security/pinLock.ts)
+    'spi.entitlement.cache.v1',   // subscription cache for offline start (EntitlementContext)
+    'groups-collapsed-active',    // dashboard section state (useGroupSections)
+    'groups-collapsed-planned',
+    'groups-collapsed-completed'
+  ]);
+  // Supabase login session: sb-<project>-auth-token (+ PKCE code-verifier)
+  const isPreserved = (key: string) => PRESERVE_KEYS.has(key) || /^sb-.+-auth-token/.test(key);
+
+  const staleKeys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key !== null && !isPreserved(key)) staleKeys.push(key);
+  }
+  staleKeys.forEach(key => localStorage.removeItem(key));
+
   // Store new version
   localStorage.setItem(VERSION_KEY, APP_VERSION);
   
-  console.log('localStorage cleared, version updated');
+  console.log(`localStorage: ${staleKeys.length} stale key(s) cleared, version updated`);
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
