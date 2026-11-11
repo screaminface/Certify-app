@@ -84,16 +84,19 @@ task moveApkToReleases {
                 def apkFile = output.outputFile
                 if (apkFile != null && apkFile.exists()) {
                     def destFile = new File(releasesDir, apkFile.name)
-                    
-                    // Move file (copy + delete source)
+
+                    // COPY, never move: the Android Gradle Plugin packages
+                    // incrementally into the existing output APK. Deleting it
+                    // made the next build write only the changed entries —
+                    // a 6-file APK without classes.dex/manifest that cannot
+                    // be installed.
                     java.nio.file.Files.copy(
                         apkFile.toPath(),
                         destFile.toPath(),
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING
                     )
-                    apkFile.delete()
-                    
-                    println "✓ APK moved to: ${destFile.absolutePath}"
+
+                    println "✓ APK copied to: ${destFile.absolutePath}"
                 }
             }
         }

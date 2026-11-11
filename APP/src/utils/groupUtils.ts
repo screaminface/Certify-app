@@ -349,8 +349,21 @@ export async function deleteGroupIfEmpty(groupId: string): Promise<boolean> {
  * 2. Ensure groups exist for all participants
  * 3. Ensure next 2 Planned periods exist (even if empty)
  * 4. Cleanup old empty planned groups
+ *
+ * Calls are SERIALIZED: each run reads snapshots, then writes based on them.
+ * Two overlapping runs (app start + a user action, or React StrictMode's
+ * double start in dev) mixed snapshots — e.g. one saw a group already moved
+ * but its participants not yet, counted the group as empty and deleted it.
  */
-export async function syncGroups(): Promise<void> {
+let syncChain: Promise<void> = Promise.resolve();
+
+export function syncGroups(): Promise<void> {
+  const run = syncChain.then(() => syncGroupsOnce());
+  syncChain = run.catch(() => undefined); // keep the chain alive after a failure
+  return run;
+}
+
+async function syncGroupsOnce(): Promise<void> {
   const allParticipants = await db.participants.toArray();
   const allGroups = await db.groups.toArray();
   
@@ -383,54 +396,41 @@ export async function syncGroups(): Promise<void> {
       await generateUniqueNumbersForGroup(g.courseStartDate);
   }
 
-  // 1.2 Sanitize Group Dates (Fix local timezone bugs resulting in Sunday dates)
-  // If any group starts on a non-Monday, shift it to Monday
+  // 1.2 Enforce the course rule on every group (completed ones included):
+  // a course STARTS ON A MONDAY and ENDS 7 DAYS LATER (next Monday).
+  // The old UTC/DST date bug stored some groups on a Sunday (start, e.g.
+  // group №8 of 2026 on 29.03) or with a Sunday end date (e.g. group №7
+  // 23.03–29.03). Start → shifted to the following Monday; end → start + 7;
+  // the group's participants get the same dates.
   let movedAnyGroup = false;
   for (const g of allGroups) {
-      // Completed groups are history: their dates are on issued certificates
-      // and protocols, so they are never moved automatically (e.g. group №8
-      // of 2026 stored as Sunday 29.03 by the old DST bug stays as issued).
-      if (g.status === 'completed') continue;
       const d = parseISODate(g.courseStartDate);
+      let startStr = g.courseStartDate;
       if (d.getDay() !== 1) {
-          console.warn(`Found invalid group start date ${g.courseStartDate} (Day: ${d.getDay()}). Fixing to Monday.`);
-          // Calculate correct Monday
-          // We can use the logic from dateUtils, assuming strict ISO parsing
-          // But simpler: just add days to get to Monday.
-          // Sunday(0) -> +1
-          // Tuesday(2) -> +6... wait, we usually want "Next Monday" or "Closest"?
-          // For the bug "25.01" (Sunday) which should be "26.01" (Monday), it's +1.
-          // If it was "24.01" (Saturday) -> +2.
+          // Sunday(0) → +1, Saturday(6) → +2, Tuesday(2) → +6 …
           const day = d.getDay();
-          const add = day === 0 ? 1 : (8 - day);
-          
-          const correctDate = new Date(d);
-          correctDate.setDate(d.getDate() + add);
-          const correctDateStr = toISODate(correctDate);
-          const correctEndDate = new Date(correctDate);
-          correctEndDate.setDate(correctDate.getDate() + 7);
-          const correctEndDateStr = toISODate(correctEndDate);
-          
-          // Check if target exists to avoid collision? 
-          // If 26.01 already exists, we should probably merge or just delete this one if empty?
-          // But for now, let's just try to update. If collision, update might fail if ID unique? No, ID is primary.
-          // But logic elsewhere relies on unique dates.
-          // Let's just update perfectly. Duplicate resolution logic later in syncGroups (Step 4) handles mergers!
-          await db.groups.update(g.id, {
-             courseStartDate: correctDateStr,
-             // Update End Date too
-             courseEndDate: correctEndDateStr
-          });
-          
-          // Also update participants!
-          const participantsInGroup = allParticipants.filter(p => p.courseStartDate === g.courseStartDate);
-          for (const p of participantsInGroup) {
-              await db.participants.update(p.id, {
-                  courseStartDate: correctDateStr,
-                  courseEndDate: correctEndDateStr
-              });
-          }
+          const monday = new Date(d);
+          monday.setDate(d.getDate() + (day === 0 ? 1 : 8 - day));
+          startStr = toISODate(monday);
+      }
+      const end = parseISODate(startStr);
+      end.setDate(end.getDate() + 7);
+      const endStr = toISODate(end);
+
+      if (startStr !== g.courseStartDate || endStr !== g.courseEndDate) {
+          console.warn(`Course dates ${g.courseStartDate}..${g.courseEndDate} → ${startStr}..${endStr} (Monday start, +7 days)`);
+          // A collision with an existing group on the new date is merged by
+          // the duplicate step below (participants link by date, not id).
+          await db.groups.update(g.id, { courseStartDate: startStr, courseEndDate: endStr });
           movedAnyGroup = true;
+      }
+
+      // Participants of this group (linked by its stored start date)
+      for (const p of allParticipants.filter(p => p.courseStartDate === g.courseStartDate)) {
+          if (p.courseStartDate !== startStr || p.courseEndDate !== endStr) {
+              await db.participants.update(p.id, { courseStartDate: startStr, courseEndDate: endStr });
+              movedAnyGroup = true;
+          }
       }
   }
 
@@ -438,7 +438,8 @@ export async function syncGroups(): Promise<void> {
   // groups/participants they are stale — a moved planned group looked empty
   // (counts keyed by the old date) and was pruned. Start over with fresh
   // data; the second pass finds nothing left to move, so this recurses once.
-  if (movedAnyGroup) return syncGroups();
+  // (syncGroupsOnce, not syncGroups: we already hold the serialization slot)
+  if (movedAnyGroup) return syncGroupsOnce();
 
   // 2. Identify all required periods
   const requiredPeriods = new Set<string>();
