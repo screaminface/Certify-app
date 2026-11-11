@@ -60,6 +60,11 @@ export interface Settings {
   lastUniquePrefix: number;
   lastUniqueSeq: number;
   lastResetYear: number | null;
+  // Where the current numbering cycle started — the counter never drops below
+  // this (3533/0 for 2026; after a yearly reset: bumped prefix / 0). Not
+  // derivable from participant data. Optional: older DBs/backups lack it.
+  counterFloorPrefix?: number;
+  counterFloorSeq?: number;
 }
 
 export interface YearlyArchive {
@@ -207,7 +212,9 @@ export async function initializeSettings() {
         id: 1,
         lastUniquePrefix: 3533,
         lastUniqueSeq: 0,
-        lastResetYear: null
+        lastResetYear: null,
+        counterFloorPrefix: 3533,
+        counterFloorSeq: 0
       });
     } else {
       // Migration: Update old prefix 3531 to 3533 for year 2026
@@ -219,6 +226,8 @@ export async function initializeSettings() {
         });
         console.log('✅ Updated unique number prefix to 3533 for 2026');
       }
+      // The counter floor for DBs created before it existed is recorded at
+      // app start (ensureCounterFloorRecorded in uniqueNumberUtils).
     }
   } catch (err) {
     console.error('Failed to initialize settings:', err);

@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { v4 as uuidv4 } from 'uuid';
 import { Participant } from '../db/database';
-import { computeCourseDates } from '../utils/dateUtils';
+import { computeCourseDates, parseISODate, toISODate } from '../utils/dateUtils';
 import {
   checkForGaps,
   generateNextUniqueNumber,
@@ -55,9 +55,9 @@ export function useParticipants() {
       : (createsForDate || courseStartDate);
 
     const finalCourseEndDate = (() => {
-      const d = new Date(finalCourseStartDate);
+      const d = parseISODate(finalCourseStartDate);
       d.setDate(d.getDate() + 7);
-      return d.toISOString().split('T')[0];
+      return toISODate(d);
     })();
 
     // FINAL VALIDITY CHECK
@@ -206,9 +206,9 @@ export function useParticipants() {
         : (createsForDate || strictCourseStartDate);
 
       const finalCourseEndDate = (() => {
-        const d = new Date(finalCourseStartDate);
+        const d = parseISODate(finalCourseStartDate);
         d.setDate(d.getDate() + 7);
-        return d.toISOString().split('T')[0];
+        return toISODate(d);
       })();
 
       // Validate medical is valid for the determined course
@@ -275,6 +275,10 @@ export function useParticipants() {
     if (updates.documents !== undefined) participantUpdates.documents = updates.documents;
     if (updates.handedOver !== undefined) participantUpdates.handedOver = updates.handedOver;
     if (updates.paid !== undefined) participantUpdates.paid = updates.paid;
+    // completedOverride: true/false = manual override, null = clear override.
+    // Must be copied explicitly — the readback at `willBeCompleted` below
+    // depends on it, and without this line the manual Completed toggle is a no-op.
+    if (updates.completedOverride !== undefined) participantUpdates.completedOverride = updates.completedOverride;
 
     // Recompute completedComputed if checkboxes changed
     const newSent = participantUpdates.sent !== undefined ? participantUpdates.sent : participant.sent;

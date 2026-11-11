@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db, Group } from '../db/database';
-import { computeCourseDates } from './dateUtils';
+import { computeCourseDates, parseISODate, toISODate } from './dateUtils';
 import { isMedicalValidForCourse } from './medicalValidation';
 import {
   assignUniqueNumbersForGroupActivation,
@@ -211,7 +211,7 @@ export async function createGroup(courseStartDate: string, status: 'active' | 'p
     groupNumber = null;
   }
   
-  const courseEndDate = new Date(courseStartDate);
+  const courseEndDate = parseISODate(courseStartDate);
   courseEndDate.setDate(courseEndDate.getDate() + 7);
   
   const now = new Date().toISOString();
@@ -220,7 +220,7 @@ export async function createGroup(courseStartDate: string, status: 'active' | 'p
     id: uuidv4(),
     groupNumber, // null for planned, number for active
     courseStartDate,
-    courseEndDate: courseEndDate.toISOString().split('T')[0],
+    courseEndDate: toISODate(courseEndDate),
     status,
     createdAt: now,
     updatedAt: now,
@@ -373,10 +373,7 @@ export async function syncGroups(): Promise<void> {
   // 1.2 Sanitize Group Dates (Fix local timezone bugs resulting in Sunday dates)
   // If any group starts on a non-Monday, shift it to Monday
   for (const g of allGroups) {
-      const d = new Date(g.courseStartDate);
-      // d is UTC midnight.
-      // But g.courseStartDate string "2026-01-25" (Sunday)
-      // d.getDay() for "2026-01-25" is 0 (Sunday).
+      const d = parseISODate(g.courseStartDate);
       if (d.getDay() !== 1) {
           console.warn(`Found invalid group start date ${g.courseStartDate} (Day: ${d.getDay()}). Fixing to Monday.`);
           // Calculate correct Monday
@@ -391,7 +388,10 @@ export async function syncGroups(): Promise<void> {
           
           const correctDate = new Date(d);
           correctDate.setDate(d.getDate() + add);
-          const correctDateStr = correctDate.toISOString().split('T')[0];
+          const correctDateStr = toISODate(correctDate);
+          const correctEndDate = new Date(correctDate);
+          correctEndDate.setDate(correctDate.getDate() + 7);
+          const correctEndDateStr = toISODate(correctEndDate);
           
           // Check if target exists to avoid collision? 
           // If 26.01 already exists, we should probably merge or just delete this one if empty?
@@ -401,7 +401,7 @@ export async function syncGroups(): Promise<void> {
           await db.groups.update(g.id, {
              courseStartDate: correctDateStr,
              // Update End Date too
-             courseEndDate: new Date(correctDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+             courseEndDate: correctEndDateStr
           });
           
           // Also update participants!
@@ -409,7 +409,7 @@ export async function syncGroups(): Promise<void> {
           for (const p of participantsInGroup) {
               await db.participants.update(p.id, {
                   courseStartDate: correctDateStr,
-                  courseEndDate: new Date(correctDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                  courseEndDate: correctEndDateStr
               });
           }
       }
@@ -425,7 +425,7 @@ export async function syncGroups(): Promise<void> {
   // Base date is Active Group start OR current week
   let baseDate: Date;
   if (activeGroup) {
-    baseDate = new Date(activeGroup.courseStartDate);
+    baseDate = parseISODate(activeGroup.courseStartDate);
   } else {
     // Determine next Monday from today
     const today = new Date();
@@ -446,8 +446,8 @@ export async function syncGroups(): Promise<void> {
   const period2 = new Date(baseDate);
   period2.setDate(period2.getDate() + 14); // Week after next
   
-  requiredPeriods.add(period1.toISOString().split('T')[0]);
-  requiredPeriods.add(period2.toISOString().split('T')[0]);
+  requiredPeriods.add(toISODate(period1));
+  requiredPeriods.add(toISODate(period2));
 
   // 3. Ensure all required groups exist
   const existingPeriods = new Set(allGroups.map(g => g.courseStartDate));
@@ -667,10 +667,10 @@ export async function fixGroupDates(groupNumber: number): Promise<void> {
   }
 
   // Find earliest medical date to determine correct course start
-  const medicalDates = participants.map(p => new Date(p.medicalDate));
+  const medicalDates = participants.map(p => parseISODate(p.medicalDate));
   const earliestMedical = new Date(Math.min(...medicalDates.map(d => d.getTime())));
 
-  const correctDates = computeCourseDates(earliestMedical.toISOString().split('T')[0]);
+  const correctDates = computeCourseDates(toISODate(earliestMedical));
 
   // Update group with correct dates
   await db.groups.update(group.id, {

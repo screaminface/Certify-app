@@ -16,6 +16,7 @@ import { Participant } from './db/database';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { useLanguage } from './contexts/LanguageContext';
 import { ensureSingleActiveGroup, syncGroups } from './utils/groupUtils';
+import { ensureCounterFloorRecorded } from './utils/uniqueNumberUtils';
 import { AppLockGate } from './components/security/AppLockGate';
 import { EntitlementProvider, useEntitlement } from './contexts/EntitlementContext';
 import { ToolsPage } from './components/ToolsPage';
@@ -90,6 +91,11 @@ function AppContent() {
       } catch (err) {
          console.error('CRITICAL: Failed to initialize groups:', err);
          // We might want to trigger error boundary here if essential
+      }
+      try {
+        await ensureCounterFloorRecorded();
+      } catch (err) {
+        console.error('Failed to record unique number counter floor:', err);
       }
     };
     // Small delay to allow Dexie to settle if concurrent opens happen

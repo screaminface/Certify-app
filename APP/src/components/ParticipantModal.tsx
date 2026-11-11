@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Participant, db } from '../db/database';
 import { useParticipants } from '../hooks/useParticipants';
-import { computeCourseDates } from '../utils/dateUtils';
+import { computeCourseDates, parseISODate, toISODate } from '../utils/dateUtils';
 import { isValidUniqueNumberFormat, isUniqueNumberAvailable, generateNextUniqueNumber, checkForGaps, parseUniqueNumber } from '../utils/uniqueNumberUtils';
 import { isMedicalValidForCourse, formatDateBG } from '../utils/medicalValidation';
 import { getActiveGroup, getSuggestedGroup } from '../utils/groupUtils';
@@ -86,14 +86,14 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
         setSuggestedGroup(result.group);
       } else if (result.createsForDate) {
         // Create a dummy group object for display purposes
-        const d = new Date(result.createsForDate);
+        const d = parseISODate(result.createsForDate);
         const endDate = new Date(d);
         endDate.setDate(d.getDate() + 7);
-        
+
         setSuggestedGroup({
           groupNumber: null,
           courseStartDate: result.createsForDate,
-          courseEndDate: endDate.toISOString().split('T')[0],
+          courseEndDate: toISODate(endDate),
           status: 'planned'
         });
       } else {

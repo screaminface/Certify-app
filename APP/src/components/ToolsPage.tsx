@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { db, Participant, Group, Settings } from '../db/database';
+import { db, Participant, Group, Settings, YearlyArchive } from '../db/database';
+import { parseISODate } from '../utils/dateUtils';
+import { formatUniqueNumber, ensureCounterFloorRecorded } from '../utils/uniqueNumberUtils';
 import { useSettings } from '../hooks/useSettings';
 import { formatDateBG } from '../utils/medicalValidation';
 import { encryptBackupJson, decryptBackupJson, isEncryptedBackup, EncryptedBackup } from '../utils/cryptoUtils';
@@ -50,6 +52,8 @@ interface BackupData {
   participants: Participant[];
   groups: Group[];
   settings: Settings;
+  // Optional: backups made before 3.0 lack it
+  yearlyArchives?: YearlyArchive[];
 }
 
 export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, entitlement, entitlementLoading = false, onSignOut }) => {
@@ -164,10 +168,10 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
       }
 
       if (mode === 'replace') {
-        await db.transaction('rw', [db.participants, db.groups, db.settings], async () => {
+        await db.transaction('rw', [db.participants, db.groups, db.settings, db.yearlyArchives], async () => {
           await db.participants.clear();
           await db.groups.clear();
-          
+
           if (backup.groups.length > 0) {
             await db.groups.bulkAdd(backup.groups);
           }
@@ -176,14 +180,52 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
           }
           if (backup.settings) {
             await db.settings.update(1, backup.settings);
+            if (typeof backup.settings.counterFloorPrefix !== 'number') {
+              // Backup predates the counter floor — drop the local one so it
+              // is re-derived from the imported data below.
+              await db.settings.update(1, { counterFloorPrefix: undefined, counterFloorSeq: undefined });
+            }
+          }
+          // Restore archives only if the backup carries them; older backups
+          // don't, and wiping local archives then would lose the only record
+          // of issued certificate numbers.
+          if (backup.yearlyArchives) {
+            await db.yearlyArchives.clear();
+            if (backup.yearlyArchives.length > 0) {
+              await db.yearlyArchives.bulkAdd(backup.yearlyArchives);
+            }
           }
         });
+        await ensureCounterFloorRecorded();
       } else {
         // Merge - Load existing unique numbers BEFORE transaction (Android WebView fix)
         const existingParticipants = await db.participants.toArray();
-        const usedUniqueNumbers = new Set(existingParticipants.map(p => p.uniqueNumber));
-        
-        await db.transaction('rw', [db.participants, db.groups, db.settings], async () => {
+        // '' means "no number yet" (planned participants) — it is NOT a taken
+        // number; treating it as one hands out real numbers to every imported
+        // planned participant and jumps the counter.
+        const usedUniqueNumbers = new Set(
+          existingParticipants.map(p => p.uniqueNumber).filter(n => !!n)
+        );
+
+        await db.transaction('rw', [db.participants, db.groups, db.settings, db.yearlyArchives], async () => {
+          // Merge archives by year: append entries missing from the local archive
+          if (backup.yearlyArchives) {
+            for (const incoming of backup.yearlyArchives) {
+              const local = await db.yearlyArchives.get(incoming.id);
+              if (!local) {
+                await db.yearlyArchives.put(incoming);
+              } else {
+                const localGroupIds = new Set(local.groups.map(g => g.id));
+                const localParticipantIds = new Set(local.participants.map(p => p.id));
+                await db.yearlyArchives.put({
+                  ...local,
+                  groups: [...local.groups, ...incoming.groups.filter(g => !localGroupIds.has(g.id))],
+                  participants: [...local.participants, ...incoming.participants.filter(p => !localParticipantIds.has(p.id))]
+                });
+              }
+            }
+          }
+
           // Import groups first (bulkPut handles existing/new)
           if (backup.groups.length > 0) {
             await db.groups.bulkPut(backup.groups);
@@ -199,13 +241,14 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
               let uniqueNumber = participant.uniqueNumber;
               let attempts = 0;
               
-              // Check against pre-loaded Set (no nested queries in transaction)
-              while (usedUniqueNumbers.has(uniqueNumber) && attempts < 1000) {
+              // Check against pre-loaded Set (no nested queries in transaction).
+              // Empty uniqueNumber (planned participant) is kept as-is.
+              while (uniqueNumber && usedUniqueNumbers.has(uniqueNumber) && attempts < 1000) {
                 const currentSettings = await db.settings.get(1);
                 if (currentSettings) {
                   const newPrefix = currentSettings.lastUniquePrefix + 1;
                   const newSeq = currentSettings.lastUniqueSeq + 1;
-                  uniqueNumber = `${newPrefix.toString().padStart(4, '0')}-${newSeq.toString().padStart(3, '0')}`;
+                  uniqueNumber = formatUniqueNumber(newPrefix, newSeq);
                   await db.settings.update(1, {
                     lastUniquePrefix: newPrefix,
                     lastUniqueSeq: newSeq
@@ -214,8 +257,8 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
                 attempts++;
               }
 
-              // Add to Set to track new additions within transaction
-              usedUniqueNumbers.add(uniqueNumber);
+              // Add to Set to track new additions within transaction (never '')
+              if (uniqueNumber) usedUniqueNumbers.add(uniqueNumber);
               
               await db.participants.add({
                 ...participant,
@@ -251,13 +294,17 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
       const participants = await db.participants.toArray();
       const groups = await db.groups.toArray();
       const currentSettings = await db.settings.get(1);
+      const yearlyArchives = await db.yearlyArchives.toArray();
 
       const backup: BackupData = {
         version: CURRENT_BACKUP_VERSION.toString(),
         timestamp: new Date().toISOString(),
         participants,
         groups,
-        settings: currentSettings!
+        settings: currentSettings!,
+        // Archives hold issued certificate numbers — without them a restore
+        // re-issues numbers that are on printed certificates.
+        yearlyArchives
       };
 
       // Encrypt
@@ -352,7 +399,9 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
 
       // 1. Fetch all relevant data
       const groups = await db.groups.toArray();
-      const participants = filteredParticipants.length > 0 ? filteredParticipants : await db.participants.toArray();
+      // Export exactly what the current filter shows — an empty result must
+      // produce an empty sheet, not silently dump the entire database.
+      const participants = filteredParticipants;
       
       // 2. Build map of Group Status per Date
       const groupStatusMap = new Map<string, string>(); // active, planned, completed
@@ -452,6 +501,14 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
       const groups = filteredParticipants.length > 0 ? await db.groups.toArray() : [];
       const groupMap = new Map(groups.map(g => [g.courseStartDate, g.groupNumber]));
 
+      // CSV escaping: double embedded quotes; neutralize formula injection
+      // (values starting with = + - @ execute when opened in Excel)
+      const csvCell = (value: unknown): string => {
+        let s = String(value ?? '');
+        if (/^[=+\-@]/.test(s)) s = `'${s}`;
+        return `"${s.replace(/"/g, '""')}"`;
+      };
+
       const rows = filteredParticipants.map(p => [
         p.companyName,
         p.personName,
@@ -469,7 +526,7 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
 
       const csv = [
         headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        ...rows.map(row => row.map(csvCell).join(','))
       ].join('\n');
 
       const blob = new Blob([csv], { type: 'text/csv' });
@@ -563,48 +620,76 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
         return;
       }
       
-      // Get completed groups from current year
-      const completedGroupsThisYear = groups.filter(g => {
-        if (g.status !== 'completed') return false;
-        const courseYear = new Date(g.courseStartDate).getFullYear();
-        return courseYear === currentYear;
-      });
-      
-      if (completedGroupsThisYear.length === 0) {
+      // Archive ALL completed groups, each into its own year's archive row.
+      // (Filtering to only the current year left last-December groups that
+      // weren't archived before Jan 1 permanently unarchivable.)
+      const completedGroups = groups.filter(g => g.status === 'completed');
+
+      if (completedGroups.length === 0) {
         showAlert(t('common.info'), t('archive.noGroupsToArchive'), 'info');
         setShowArchiveModal(false);
         setArchiveConfirmText('');
         return;
       }
-      
-      const completedGroupDates = new Set(completedGroupsThisYear.map(g => g.courseStartDate));
-      const participantsToArchive = participants.filter(p => completedGroupDates.has(p.courseStartDate));
-      
-      // Create archive entry
-      const archiveId = `archive-${currentYear}`;
-      await db.yearlyArchives.put({
-        id: archiveId,
-        year: currentYear,
-        groups: completedGroupsThisYear,
-        participants: participantsToArchive,
-        archivedAt: new Date().toISOString()
-      });
-      
-      // Delete from main tables
-      await db.groups.bulkDelete(completedGroupsThisYear.map(g => g.id));
-      await db.participants.bulkDelete(participantsToArchive.map(p => p.id));
-      
-      // Reset yearly sequence (increment prefix, reset sequence to 001)
-      const currentSettings = await db.settings.get(1);
-      if (currentSettings) {
-        await db.settings.update(1, {
-          lastUniquePrefix: currentSettings.lastUniquePrefix + 1,
-          lastUniqueSeq: 0,
-          lastResetYear: currentYear
-        });
+
+      const byYear = new Map<number, Group[]>();
+      for (const g of completedGroups) {
+        const year = parseISODate(g.courseStartDate).getFullYear();
+        if (!byYear.has(year)) byYear.set(year, []);
+        byYear.get(year)!.push(g);
       }
-      
-      showAlert(t('common.success'), t('tools.archiveYearSuccess', { count: completedGroupsThisYear.length.toString() }), 'success');
+
+      const completedGroupDates = new Set(completedGroups.map(g => g.courseStartDate));
+      const participantsToArchive = participants.filter(p => completedGroupDates.has(p.courseStartDate));
+
+      // Create or MERGE into each year's archive entry — a second archive run
+      // must append, not overwrite (put would destroy the earlier archived
+      // groups/participants irrecoverably). One transaction: either all of it
+      // (archive + delete + counter reset) happens, or none.
+      await db.transaction('rw', [db.yearlyArchives, db.groups, db.participants, db.settings], async () => {
+        for (const [year, yearGroups] of byYear) {
+          const archiveId = `archive-${year}`;
+          const yearDates = new Set(yearGroups.map(g => g.courseStartDate));
+          const yearParticipants = participantsToArchive.filter(p => yearDates.has(p.courseStartDate));
+
+          const existing = await db.yearlyArchives.get(archiveId);
+          const existingGroupIds = new Set((existing?.groups || []).map(g => g.id));
+          const existingParticipantIds = new Set((existing?.participants || []).map(p => p.id));
+          await db.yearlyArchives.put({
+            id: archiveId,
+            year,
+            groups: [
+              ...(existing?.groups || []),
+              ...yearGroups.filter(g => !existingGroupIds.has(g.id))
+            ],
+            participants: [
+              ...(existing?.participants || []),
+              ...yearParticipants.filter(p => !existingParticipantIds.has(p.id))
+            ],
+            archivedAt: new Date().toISOString()
+          });
+        }
+
+        // Delete from main tables
+        await db.groups.bulkDelete(completedGroups.map(g => g.id));
+        await db.participants.bulkDelete(participantsToArchive.map(p => p.id));
+
+        // Reset yearly sequence (increment prefix, reset sequence to 001).
+        // The new cycle start is also the floor the counter may never drop below.
+        const currentSettings = await db.settings.get(1);
+        if (currentSettings) {
+          const nextPrefix = currentSettings.lastUniquePrefix + 1;
+          await db.settings.update(1, {
+            lastUniquePrefix: nextPrefix,
+            lastUniqueSeq: 0,
+            lastResetYear: currentYear,
+            counterFloorPrefix: nextPrefix,
+            counterFloorSeq: 0
+          });
+        }
+      });
+
+      showAlert(t('common.success'), t('tools.archiveYearSuccess', { count: completedGroups.length.toString() }), 'success');
       setShowArchiveModal(false);
       setArchiveConfirmText('');
     } catch (error) {
@@ -1430,12 +1515,10 @@ const YearlyArchiveSection: React.FC<{
   const plannedGroupsCount = allGroups?.filter(g => g.status === 'planned' && participantDates.has(g.courseStartDate)).length || 0;
   const guardFails = activeGroupsCount > 0 || plannedGroupsCount > 0;
   const isReady = !guardFails;
-  
-  const completedGroupsThisYear = allGroups?.filter(g => {
-    if (g.status !== 'completed') return false;
-    const courseYear = new Date(g.courseStartDate).getFullYear();
-    return courseYear === currentYear;
-  }) || [];
+
+  // Preview must match handleArchiveCurrentYear: ALL completed groups are
+  // archived (each into its own year), not just the current year's.
+  const completedGroupsThisYear = allGroups?.filter(g => g.status === 'completed') || [];
   
   const participantsCount = allParticipants?.filter(p => 
     completedGroupsThisYear.some(g => g.courseStartDate === p.courseStartDate)
@@ -1556,12 +1639,10 @@ const YearlyArchiveModal: React.FC<{
   const participantDates = new Set((allParticipants || []).map(p => p.courseStartDate));
   const hasPlannedGroups = allGroups?.some(g => g.status === 'planned' && participantDates.has(g.courseStartDate)) || false;
   const guardFails = hasActiveGroups || hasPlannedGroups;
-  
-  const completedGroupsThisYear = allGroups?.filter(g => {
-    if (g.status !== 'completed') return false;
-    const courseYear = new Date(g.courseStartDate).getFullYear();
-    return courseYear === currentYear;
-  }) || [];
+
+  // Preview must match handleArchiveCurrentYear: ALL completed groups are
+  // archived (each into its own year), not just the current year's.
+  const completedGroupsThisYear = allGroups?.filter(g => g.status === 'completed') || [];
   
   const participantsCount = allParticipants?.filter(p => 
     completedGroupsThisYear.some(g => g.courseStartDate === p.courseStartDate)

@@ -26,6 +26,73 @@ export function parseUniqueNumber(uniqueNumber: string): { prefix: number; seq: 
   };
 }
 
+type CounterValue = { prefix: number; seq: number };
+
+/** 2026 baseline: the first number of the year was 3534-1. */
+export const DEFAULT_COUNTER_FLOOR: CounterValue = { prefix: 3533, seq: 0 };
+
+const higherOf = (a: CounterValue | null, b: CounterValue): CounterValue =>
+  !a || b.prefix > a.prefix || (b.prefix === a.prefix && b.seq > a.seq) ? b : a;
+
+/**
+ * The lowest value the counter may drop to: where the current numbering cycle
+ * started. Stored in settings at every yearly reset (it is not derivable from
+ * participant data). DBs created before the field existed get a derivation:
+ * - never reset            → the 2026 baseline 3533/0
+ * - reset, nothing issued  → the current settings value (prefix / 0)
+ * - reset, numbers issued  → one past the highest archived prefix, seq 0
+ *   (a reset bumps the prefix past everything archived at that moment)
+ */
+export async function getCounterFloor(): Promise<CounterValue> {
+  const settings = await db.settings.get(1);
+  if (settings && typeof settings.counterFloorPrefix === 'number') {
+    return { prefix: settings.counterFloorPrefix, seq: settings.counterFloorSeq ?? 0 };
+  }
+
+  let floor: CounterValue = { ...DEFAULT_COUNTER_FLOOR };
+  if (settings?.lastResetYear) {
+    if (settings.lastUniqueSeq === 0) {
+      floor = higherOf(floor, { prefix: settings.lastUniquePrefix, seq: 0 });
+    } else {
+      let maxArchivedPrefix = 0;
+      for (const archive of await db.yearlyArchives.toArray()) {
+        for (const p of archive.participants) {
+          const parsed = p.uniqueNumber ? parseUniqueNumber(p.uniqueNumber) : null;
+          if (parsed && parsed.prefix > maxArchivedPrefix) maxArchivedPrefix = parsed.prefix;
+        }
+      }
+      if (maxArchivedPrefix > 0) floor = higherOf(floor, { prefix: maxArchivedPrefix + 1, seq: 0 });
+    }
+  }
+  return floor;
+}
+
+/**
+ * One-time migration: record the floor for DBs (or restored backups) created
+ * before the field existed. No-op once it is stored.
+ */
+export async function ensureCounterFloorRecorded(): Promise<void> {
+  const settings = await db.settings.get(1);
+  if (!settings || typeof settings.counterFloorPrefix === 'number') return;
+  const floor = await getCounterFloor();
+  await db.settings.update(1, { counterFloorPrefix: floor.prefix, counterFloorSeq: floor.seq });
+}
+
+/**
+ * Recompute the counter from actual data (participants + archives), never
+ * below the floor. The stored settings value is a high-water mark that must
+ * be allowed to go DOWN after a delete/clear — otherwise deleting the newest
+ * participant leaves the counter stuck and the next number skips ahead.
+ */
+async function recomputeCounterFromData(): Promise<void> {
+  const dataMax = await getGlobalMaxUniqueNumber(true);
+  const next = higherOf(dataMax, await getCounterFloor());
+  await db.settings.update(1, {
+    lastUniquePrefix: next.prefix,
+    lastUniqueSeq: next.seq
+  });
+}
+
 /**
  * Get the global maximum unique number from existing participants (Active & Completed)
  * AND Yearly Archives (if accessible, though usually we rely on current active DB state + Settings)
@@ -220,7 +287,10 @@ export async function resetYearlySequence(): Promise<void> {
   await db.settings.update(1, {
     lastUniquePrefix: nextPrefix,
     lastUniqueSeq: 0,
-    lastResetYear: new Date().getFullYear()
+    lastResetYear: new Date().getFullYear(),
+    // New numbering cycle starts here — the counter must never drop below it
+    counterFloorPrefix: nextPrefix,
+    counterFloorSeq: 0
   });
 }
 
@@ -275,25 +345,8 @@ export async function realignUniqueNumbers(deletedNumber: string): Promise<void>
     await db.participants.update(item.id, { uniqueNumber: item.newNum });
   }
 
-  // Update Settings to the new max
-  // Note: If we deleted the HEAD, we need to reduce settings.
-  // By recalculating max from the whole (simulated) set, we cover this.
-  
-  // However, if we deleted the ONLY item, inputs were 0.
-  // We should fallback to current settings - 1 if it matches deleted?
-  // Let's rely on re-fetching Max from DB after updates.
-  
-  const newMax = await getGlobalMaxUniqueNumber();
-  if (newMax) {
-       await db.settings.update(1, {
-          lastUniquePrefix: newMax.prefix,
-          lastUniqueSeq: newMax.seq
-      });
-  } else {
-      // If table empty, maybe reset? or revert to some safe base?
-      // Leave as is or decrement manually if we knew it was the tip.
-      // Safe implementation: Do nothing if empty, user will see start.
-  }
+  // Recompute the counter from data, never below the cycle floor (3533/0 in 2026)
+  await recomputeCounterFromData();
 }
 
 /**
@@ -471,24 +524,8 @@ export async function clearUniqueNumbersForGroup(groupCourseStartDate: string): 
       }
   }
   
-  // 3. Update Settings to reflect new Max (Top of Stack dropped)
-  // CRITICAL: We pass true to ignore CURRENT Settings, forcing a recalculation from DB only.
-  // This allows the Settings to "Drop" if we just cleared the top-most numbers.
-  const newMax = await getGlobalMaxUniqueNumber(true);
-  
-  if (newMax) {
-       await db.settings.update(1, {
-          lastUniquePrefix: newMax.prefix,
-          lastUniqueSeq: newMax.seq
-      });
-  } else {
-       // If empty, maybe reset to baseline?
-       // Let's assume initialized defaults (3533) were correct base. 
-       // We can read defaults or just leave as is (if we can't find max, we don't touch settings? 
-       // No, if we cleared everything, we MUST reset settings to "Before start").
-       // But 'initializeSettings' sets 3533. 
-       // If DB is empty, getGlobalMax returns null.
-       // We should arguably reset to the "Start State" if everything is gone.
-       // But users rarely delete ALL data.
-  }
+  // 3. Update Settings to reflect new Max (Top of Stack dropped), recalculated
+  // from data only and never below the cycle floor — also when no numbered
+  // participant is left (previously the counter stayed stuck high then).
+  await recomputeCounterFromData();
 }

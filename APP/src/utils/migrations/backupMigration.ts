@@ -8,7 +8,7 @@
  * 3. Pure: Migrations transform data without side effects.
  */
 
-import { Participant, Group, Settings } from '../../db/database';
+import { Participant, Group, Settings, YearlyArchive } from '../../db/database';
 
 export const CURRENT_BACKUP_VERSION = 2; // INCREMENT THIS WHEN SCHEMA CHANGES
 
@@ -39,6 +39,8 @@ export interface BackupV2 {
   participants: Participant[]; // Matches current DB interface
   groups: Group[];
   settings: Settings;
+  // Optional (backups created before archives were included simply lack it)
+  yearlyArchives?: YearlyArchive[];
 }
 
 // Union type of all possible backup shapes
@@ -85,7 +87,9 @@ function migrateV1toV2(data: BackupV1): BackupV2 {
 
 export function migrateToLatest(rawData: any): BackupV2 {
   // 1. Identify Version (default to 1 if missing)
-  let currentVersion = rawData.version || 1;
+  // Normalize: exports historically wrote version as a string ("2", "1.0");
+  // the switch below needs a number or old backups fail to import.
+  let currentVersion = Math.floor(Number(rawData?.version)) || 1;
   let data = rawData;
 
   console.log(`Starting Import. Backup Version: ${currentVersion}. Current App Version: ${CURRENT_BACKUP_VERSION}`);

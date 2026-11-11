@@ -40,29 +40,40 @@ export function computeCourseDates(medicalDate: string): {
   courseStartDate: string;
   courseEndDate: string;
 } {
-  const medical = new Date(medicalDate);
+  const medical = parseISODate(medicalDate);
   const startDate = nextMonday(medical);
-  
+
   const endDate = new Date(startDate);
   endDate.setDate(endDate.getDate() + 7);
-  
+
   return {
-    courseStartDate: startDate.toISOString().split('T')[0],
-    courseEndDate: endDate.toISOString().split('T')[0]
+    courseStartDate: toISODate(startDate),
+    courseEndDate: toISODate(endDate)
   };
 }
 
 /**
- * Format a date to ISO date string (YYYY-MM-DD)
+ * Format a date to ISO date string (YYYY-MM-DD) using LOCAL date components.
+ * Never use toISOString() for calendar dates: it converts to UTC, and around
+ * the DST switch that shifts the date by a day (courses landing on Sunday).
  */
 export function toISODate(date: Date): string {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 /**
- * Parse ISO date string to Date object
+ * Parse ISO date string (YYYY-MM-DD) to a LOCAL Date object.
+ * new Date('YYYY-MM-DD') parses as UTC midnight, which combined with local
+ * getDay()/setDate() breaks around DST transitions — parse locally instead.
  */
 export function parseISODate(isoString: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoString);
+  if (match) {
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
   return new Date(isoString);
 }
 
