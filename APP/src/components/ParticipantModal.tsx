@@ -7,6 +7,8 @@ import { isMedicalValidForCourse, formatDateBG } from '../utils/medicalValidatio
 import { getActiveGroup, getSuggestedGroup } from '../utils/groupUtils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ConfirmModal } from './ui/ConfirmModal';
+import { CompanySelect } from './ui/CompanySelect';
+import { COMPANIES } from '../constants/companies';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface ParticipantModalProps {
@@ -429,19 +431,16 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
           {t('modal.companyName')} *
         </label>
 
-        {/* Desktop: native select */}
-        <select
+        {/* Desktop: styled dropdown */}
+        <CompanySelect
+          className="hidden sm:block"
           value={formData.companyName}
-          onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-          className={`hidden sm:block w-full px-3.5 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${
-            errors.companyName ? 'border-red-400' : 'border-slate-200'
-          }`}
-        >
-          <option value="">{t('modal.selectCompany')}</option>
-          <option value="Egida">Egida</option>
-          <option value="D-Max">D-Max</option>
-          <option value="Multiforce">Multiforce</option>
-        </select>
+          onChange={(companyName) => setFormData(prev => ({ ...prev, companyName }))}
+          label={t('modal.companyName')}
+          required
+          placeholder={t('modal.selectCompany')}
+          hasError={!!errors.companyName}
+        />
 
         {/* Mobile: bottom sheet trigger */}
         <button
@@ -483,7 +482,7 @@ export const ParticipantModal: React.FC<ParticipantModalProps> = ({
               <p className="text-base font-bold text-slate-900">{t('modal.companyName')}</p>
             </div>
             <div className="py-2">
-              {['Egida', 'D-Max', 'Multiforce'].map((company) => (
+              {COMPANIES.map((company) => (
                 <button
                   key={company}
                   type="button"
