@@ -6,7 +6,8 @@ import {
   checkForGaps,
   generateNextUniqueNumber,
   isUniqueNumberAvailable,
-  realignUniqueNumbers
+  realignUniqueNumbers,
+  syncCounterUpToData
 } from '../utils/uniqueNumberUtils';
 import { syncGroups, getSuggestedGroup, createGroup, getActiveGroup, isGroupReadOnly } from '../utils/groupUtils';
 import { isMedicalValidForCourse, MEDICAL_EXPIRED_MESSAGE } from '../utils/medicalValidation';
@@ -132,7 +133,12 @@ export function useParticipants() {
     };
 
     await addParticipantRecord(participant);
-    
+
+    // Keep the stored counter in step with the number just issued
+    if (uniqueNumber) {
+      await syncCounterUpToData();
+    }
+
     // Sync groups table to ensure all periods exist
     await syncGroups();
     
@@ -312,6 +318,10 @@ export function useParticipants() {
     // If we cleared a unique number (Active→Planned), realign to make it available as gap
     if (shouldRealignAfterUpdate) {
       await realignUniqueNumbers(shouldRealignAfterUpdate);
+    } else if (participantUpdates.uniqueNumber) {
+      // A number was issued (moved into the active group / edited) — keep the
+      // stored counter in step with it
+      await syncCounterUpToData();
     }
 
     // Sync groups table to ensure all periods exist

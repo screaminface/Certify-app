@@ -79,6 +79,26 @@ export async function ensureCounterFloorRecorded(): Promise<void> {
 }
 
 /**
+ * Raise (never lower) the stored counter to the highest number actually
+ * issued. Adding a participant to an active group takes its number via
+ * generateNextUniqueNumber(), which reads data but never wrote the counter
+ * back, so "Текуща поредност" lagged behind the real last number (e.g.
+ * 3650/117 while 3655-122 was issued). Raising is always safe: every number
+ * up to the data maximum is taken anyway.
+ */
+export async function syncCounterUpToData(): Promise<void> {
+  const settings = await db.settings.get(1);
+  if (!settings) return;
+  const dataMax = await getGlobalMaxUniqueNumber(true);
+  if (!dataMax) return;
+  const current: CounterValue = { prefix: settings.lastUniquePrefix, seq: settings.lastUniqueSeq };
+  const next = higherOf(current, dataMax);
+  if (next !== current) {
+    await db.settings.update(1, { lastUniquePrefix: next.prefix, lastUniqueSeq: next.seq });
+  }
+}
+
+/**
  * Recompute the counter from actual data (participants + archives), never
  * below the floor. The stored settings value is a high-water mark that must
  * be allowed to go DOWN after a delete/clear — otherwise deleting the newest
