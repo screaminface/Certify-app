@@ -78,7 +78,7 @@ export const FilterChips: React.FC<FilterChipsProps> = ({
         onClick={() => onRemoveFilter('all')}
         className="px-3 py-1.5 bg-slate-200 text-slate-700 rounded-full text-sm hover:bg-slate-300 transition-colors duration-150"
       >
-        Clear All
+        {t('filters.clearAll')}
       </button>
     </div>
   );

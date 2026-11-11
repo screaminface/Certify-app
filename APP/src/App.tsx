@@ -6,7 +6,7 @@ import { useGroupSections } from './hooks/useGroupSections';
 import { ParticipantList } from './components/ParticipantList';
 import { ParticipantCardList } from './components/ParticipantCardList';
 import { ParticipantModal } from './components/ParticipantModal';
-import { FiltersDrawer } from './components/FiltersDrawer';
+import { FiltersDrawer, FiltersPanel } from './components/FiltersDrawer';
 import { FilterChips } from './components/FilterChips';
 import { TopBar } from './components/TopBar';
 import { StatsPills } from './components/StatsPills';
@@ -738,11 +738,36 @@ function AppContent() {
               + {t('participants.add')}
             </button>
             <button
-              onClick={() => setIsFiltersOpen(true)}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow font-medium"
+              onClick={() => setIsFiltersOpen(prev => !prev)}
+              aria-expanded={isFiltersOpen}
+              className={`px-6 py-3 rounded-lg shadow font-medium border transition-colors duration-150 ${
+                isFiltersOpen
+                  ? 'bg-blue-800 text-white border-blue-800 hover:bg-blue-900'
+                  : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+              }`}
             >
               {t('filters.title')}
             </button>
+          </div>
+
+          {/* Inline Filters Panel - Desktop only; mobile uses the bottom sheet */}
+          <div className="hidden md:block">
+            <FiltersPanel
+              isOpen={isFiltersOpen}
+              onClose={() => setIsFiltersOpen(false)}
+              searchText={searchText}
+              onSearchTextChange={setSearchText}
+              selectedGroup={selectedGroup}
+              onSelectedGroupChange={setSelectedGroup}
+              statusFilters={statusFilters}
+              onStatusFilterChange={handleStatusFilterChange}
+              dateRange={dateRange}
+              onDateRangeChange={setDateRange}
+              groups={selectableGroups}
+              onResetToDefaults={resetToDefaults}
+              visibleCount={visibleParticipants}
+              totalCount={totalParticipants}
+            />
           </div>
 
           {/* Mobile Filter Button */}
@@ -805,7 +830,7 @@ function AppContent() {
         </main>
       )}
 
-      {/* Filters Drawer/Sheet */}
+      {/* Filters bottom sheet (mobile only — renders nothing on md+) */}
       <FiltersDrawer
         isOpen={isFiltersOpen}
         onClose={() => setIsFiltersOpen(false)}

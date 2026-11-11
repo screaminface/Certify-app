@@ -31,6 +31,17 @@ import { LockScreen } from './security/LockScreen';
 import { triggerManualLock } from './security/AppLockGate';
 import { isPinSet } from '../security/pinLock';
 
+/** Uppercase section label with a hairline rule — groups the tool cards
+ *  into Групи / Данни / Настройки / Опасна зона instead of equal cards. */
+const SectionHeader: React.FC<{ title: string; danger?: boolean }> = ({ title, danger = false }) => (
+  <div className="flex items-center gap-3 pt-4">
+    <h2 className={`text-xs font-bold uppercase tracking-widest ${danger ? 'text-red-600' : 'text-slate-500'}`}>
+      {title}
+    </h2>
+    <div className={`flex-1 h-px ${danger ? 'bg-red-200' : 'bg-slate-200'}`} aria-hidden="true" />
+  </div>
+);
+
 interface ToolsPageProps {
   filteredParticipants: Participant[];
   entitlement?: {
@@ -862,42 +873,8 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
         }}
       />
 
-      {/* Language Switcher */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-        <h3 className="text-lg font-bold text-slate-900 mb-4">{t('tools.language')}</h3>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setLanguage('en')}
-            className={`flex-1 px-6 py-3 rounded-lg font-medium min-h-[48px] transition-colors duration-150 flex items-center justify-center gap-3 ${
-              language === 'en'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <ReactCountryFlag 
-              countryCode="GB" 
-              svg 
-              style={{ width: '2em', height: '1.5em', borderRadius: '4px' }}
-            />
-            English
-          </button>
-          <button
-            onClick={() => setLanguage('bg')}
-            className={`flex-1 px-6 py-3 rounded-lg font-medium min-h-[48px] transition-colors duration-150 flex items-center justify-center gap-3 ${
-              language === 'bg'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            <ReactCountryFlag 
-              countryCode="BG" 
-              svg 
-              style={{ width: '2em', height: '1.5em', borderRadius: '4px' }}
-            />
-            Български
-          </button>
-        </div>
-      </div>
+      {/* ══ Groups ══ */}
+      <SectionHeader title={t('tools.sectionGroups')} />
 
       {/* Close Active Group Section */}
       {activeGroup && (
@@ -1225,6 +1202,9 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
         </div>
       )}
 
+      {/* ══ Data ══ */}
+      <SectionHeader title={t('tools.sectionData')} />
+
       {/* Settings Info */}
       {settings && (
         <div className="bg-white p-6 rounded-lg shadow-md">
@@ -1328,6 +1308,46 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
         )}
       </div>
 
+      {/* ══ Settings ══ */}
+      <SectionHeader title={t('tools.sectionSettings')} />
+
+      {/* Language Switcher */}
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+        <h3 className="text-lg font-bold text-slate-900 mb-4">{t('tools.language')}</h3>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setLanguage('en')}
+            className={`flex-1 px-6 py-3 rounded-lg font-medium min-h-[48px] transition-colors duration-150 flex items-center justify-center gap-3 ${
+              language === 'en'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <ReactCountryFlag 
+              countryCode="GB" 
+              svg 
+              style={{ width: '2em', height: '1.5em', borderRadius: '4px' }}
+            />
+            English
+          </button>
+          <button
+            onClick={() => setLanguage('bg')}
+            className={`flex-1 px-6 py-3 rounded-lg font-medium min-h-[48px] transition-colors duration-150 flex items-center justify-center gap-3 ${
+              language === 'bg'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <ReactCountryFlag 
+              countryCode="BG" 
+              svg 
+              style={{ width: '2em', height: '1.5em', borderRadius: '4px' }}
+            />
+            Български
+          </button>
+        </div>
+      </div>
+
       {/* Security Settings */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 mb-6">
           <div className="flex items-center gap-2 mb-4">
@@ -1378,6 +1398,23 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
           </div>
       </div>
 
+      {/* About / Version Section */}
+      <div className="bg-white p-6 rounded-lg shadow-md border-2 border-blue-200">
+        <button
+          onClick={() => setShowAboutModal(true)}
+          className="w-full flex items-center justify-between py-2 min-h-[44px]"
+        >
+          <div className="flex items-center gap-2">
+            <Info className="w-5 h-5 text-blue-600" strokeWidth={2} />
+            <h3 className="text-lg font-bold text-blue-600">{t('about.title')}</h3>
+          </div>
+          <ChevronRight className="w-6 h-6 text-blue-600" strokeWidth={2} />
+        </button>
+      </div>
+
+      {/* ══ Danger ══ */}
+      <SectionHeader title={t('tools.sectionDanger')} danger />
+
       {/* Advanced Section with Danger Zone */}
       <div className="bg-white p-6 rounded-lg shadow-md border-2 border-orange-200">
         <button
@@ -1403,20 +1440,6 @@ export const ToolsPage: React.FC<ToolsPageProps> = ({ filteredParticipants, enti
             <DangerZoneReset showAlert={showAlert} />
           </div>
         )}
-      </div>
-
-      {/* About / Version Section */}
-      <div className="bg-white p-6 rounded-lg shadow-md border-2 border-blue-200">
-        <button
-          onClick={() => setShowAboutModal(true)}
-          className="w-full flex items-center justify-between py-2 min-h-[44px]"
-        >
-          <div className="flex items-center gap-2">
-            <Info className="w-5 h-5 text-blue-600" strokeWidth={2} />
-            <h3 className="text-lg font-bold text-blue-600">{t('about.title')}</h3>
-          </div>
-          <ChevronRight className="w-6 h-6 text-blue-600" strokeWidth={2} />
-        </button>
       </div>
 
       {/* About Modal */}
