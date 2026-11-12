@@ -5,7 +5,7 @@ import './index.css';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-// Build-time flag: true when built with CAPACITOR_PLATFORM env var (build-android.ps1)
+// Build-time flag: true when built with CAPACITOR_PLATFORM env var (npm run build:android)
 const IS_CAPACITOR: boolean = import.meta.env.VITE_IS_CAPACITOR === true;
 
 // Clear localStorage on version change to prevent stale cache issues
